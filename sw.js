@@ -1,7 +1,7 @@
 /* Heures — Amaltis : l'écran s'ouvre même sans réseau.
    Réseau d'abord (toujours la dernière version publiée) ; après 4 s ou en cas de coupure, la copie gardée sur le téléphone.
    Les données ne passent jamais par ici : elles viennent du script Google à chaque ouverture. */
-const CACHE = 'heures-v6';
+const CACHE = 'heures-v7';
 const FICHIERS = ['./', './index.html', './manifest.webmanifest', './icone-180.png', './icone-192.png', './icone-512.png'];
 
 self.addEventListener('install', e => {
@@ -14,7 +14,8 @@ self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
   if (e.request.method !== 'GET' || u.origin !== self.location.origin) return;  // le script Google n'est jamais intercepté
   const copie = () => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('./index.html'));
-  const reseau = fetch(e.request).then(r => {
+  // no-cache : redemande toujours à GitHub si la page a changé (sinon le navigateur garde une copie jusqu'à 10 min)
+  const reseau = fetch(e.request, { cache: 'no-cache' }).then(r => {
     if (r.ok) { const c = r.clone(); caches.open(CACHE).then(ca => ca.put(e.request, c)); }
     return r;
   });
