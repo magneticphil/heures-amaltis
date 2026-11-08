@@ -12,14 +12,16 @@
 header{margin-bottom:1.4rem} header p{margin:0;text-transform:uppercase;letter-spacing:.16em;font-size:.75rem;font-weight:700}
 h1{font-size:clamp(2rem,8vw,3rem);margin:.25rem 0} h2{margin:0 0 .75rem;font-size:1.2rem}
 section{background:white;border:1px solid #d7e4dc;border-radius:1rem;padding:1.2rem;margin-bottom:1rem}
-label{display:block;font-weight:600;margin:.75rem 0 .25rem} input,button{font:inherit;min-height:2.8rem;border-radius:.6rem}
-input{width:100%;border:1px solid #80998d;padding:.55rem .65rem}
+label{display:block;font-weight:600;margin:.75rem 0 .25rem} input,select,button{font:inherit;min-height:2.8rem;border-radius:.6rem}
+input,select{width:100%;border:1px solid #80998d;padding:.55rem .65rem}
 button{border:0;background:#143c35;color:white;padding:.65rem .95rem;font-weight:700;cursor:pointer}
 button:disabled{opacity:.55;cursor:default} button.secondary{background:#e0eee6;color:#143c35}
-button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #528961;outline-offset:2px}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #528961;outline-offset:2px}
 .actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem}.actions button{flex:1}
 #status{min-height:1.5rem;overflow-wrap:anywhere} #status[data-error=true]{color:#a1252c}
 ul{padding-left:1.2rem} li{margin:.4rem 0} details{margin-top:1rem} summary{cursor:pointer;font-weight:650}
+nav.actions{margin:0 0 1rem}
+nav button[aria-pressed="false"]{background:#e0eee6;color:#143c35}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -37,6 +39,11 @@ ul{padding-left:1.2rem} li{margin:.4rem 0} details{margin-top:1rem} summary{curs
   </form>
 </section>
 <div id="dashboard" hidden>
+  <nav class="actions" aria-label="Sections de pointage">
+    <button id="show-punch" type="button" aria-pressed="true" aria-controls="punch-panel">Pointage</button>
+    <button id="show-edit" type="button" aria-pressed="false" aria-controls="edit-panel">Corriger les heures</button>
+  </nav>
+  <div id="punch-panel">
   <section>
     <h2>Mon quart</h2>
     <p id="shift"></p>
@@ -55,6 +62,21 @@ ul{padding-left:1.2rem} li{margin:.4rem 0} details{margin-top:1rem} summary{curs
     <p id="total"></p>
     <details><summary>Voir les quarts</summary><ul id="shifts"></ul></details>
   </section>
+  </div>
+  <section id="edit-panel" hidden>
+    <h2>Corriger les heures</h2>
+    <p id="no-shifts" hidden>Aucun quart à corriger dans la période actuelle ou précédente.</p>
+    <form id="edit-shift" hidden>
+      <label for="selected-shift">Quart à corriger</label>
+      <select id="selected-shift" required></select>
+      <label for="edit-start">Heure d’entrée</label>
+      <input id="edit-start" type="time" required>
+      <label for="edit-end">Heure de sortie</label>
+      <input id="edit-end" type="time" aria-describedby="edit-hint">
+      <p id="edit-hint">Laisse la sortie vide si le quart est en cours. Une sortie avant l’entrée est comptée le lendemain.</p>
+      <div class="actions"><button id="save-edit" type="submit">Enregistrer la correction</button></div>
+    </form>
+  </section>
 </div>
 </main>
 <script>
@@ -66,6 +88,7 @@ let code = '';
 let data;
 let busy = false;
 let pending;
+let editableShifts = new Map();
 
 async function request(fn, ...args) {
   let response;
@@ -97,6 +120,10 @@ function status(message, error = false) {
 
 function controls() {
   $('sign-in').disabled = busy;
+  for (const id of ['show-punch', 'show-edit', 'selected-shift', 'edit-start', 'edit-end']) {
+    $(id).disabled = busy;
+  }
+  $('save-edit').disabled = busy || Boolean(pending);
   $('refresh').disabled = busy;
   $('logout').disabled = busy;
   $('start').disabled = busy || (pending ? pending.type !== 'entree' : Boolean(data?.ouvert));
@@ -144,8 +171,72 @@ function render(next) {
     rows.push(row);
   }
   $('shifts').replaceChildren(...rows);
+  renderEditableShifts();
   controls();
 }
+
+function showPanel(editing) {
+  $('punch-panel').hidden = editing;
+  $('edit-panel').hidden = !editing;
+  $('show-punch').setAttribute('aria-pressed', String(!editing));
+  $('show-edit').setAttribute('aria-pressed', String(editing));
+}
+
+function populateEditForm() {
+  const shift = editableShifts.get($('selected-shift').value);
+  $('edit-start').value = shift?.entree || '';
+  $('edit-end').value = shift?.sortie || '';
+}
+
+function renderEditableShifts() {
+  const select = $('selected-shift');
+  const previousSelection = select.value;
+  editableShifts = new Map();
+  const groups = [];
+  for (const [label, period] of [['Période actuelle', data.paie], ['Période précédente', data.precedente]]) {
+    const group = document.createElement('optgroup');
+    group.label = label;
+    for (const day of [...(period?.jours || [])].reverse()) {
+      for (const shift of day.quarts) {
+        editableShifts.set(shift.id, { ...shift, date: day.date });
+        const option = document.createElement('option');
+        option.value = shift.id;
+        option.textContent = dateLabel(day.date) + ' · ' + shift.entree + ' – ' + (shift.sortie || 'en cours');
+        group.append(option);
+      }
+    }
+    if (group.childElementCount) groups.push(group);
+  }
+  select.replaceChildren(...groups);
+  if (editableShifts.has(previousSelection)) select.value = previousSelection;
+  $('no-shifts').hidden = editableShifts.size > 0;
+  $('edit-shift').hidden = editableShifts.size === 0;
+  populateEditForm();
+}
+
+$('show-punch').addEventListener('click', () => showPanel(false));
+$('show-edit').addEventListener('click', () => {
+  showPanel(true);
+  if (pending) status('Retourne dans Pointage pour confirmer le pointage en attente.');
+});
+$('selected-shift').addEventListener('change', populateEditForm);
+$('edit-shift').addEventListener('submit', event => {
+  event.preventDefault();
+  run(async () => {
+    if (pending) throw new Error('Confirme d’abord le pointage en attente.');
+    const shift = editableShifts.get($('selected-shift').value);
+    if (!shift) throw new Error('Choisis un quart à corriger.');
+    const start = $('edit-start').value;
+    const end = $('edit-end').value;
+    if (start === shift.entree && end === shift.sortie) {
+      status('Les heures sont déjà à jour.');
+      return;
+    }
+    status('Enregistrement de la correction…');
+    render(await request('modifierQuart', code, shift.id, shift.date, start, end));
+    status('Correction enregistrée.');
+  });
+});
 
 function clock() {
   const parts = new Intl.DateTimeFormat('fr-CA', {
@@ -204,6 +295,10 @@ $('logout').addEventListener('click', () => {
   $('period').textContent = '';
   $('total').textContent = '';
   $('shifts').replaceChildren();
+  editableShifts.clear();
+  $('selected-shift').replaceChildren();
+  $('edit-shift').reset();
+  showPanel(false);
   $('dashboard').hidden = true;
   $('access').hidden = false;
   status('Déconnecté.');
