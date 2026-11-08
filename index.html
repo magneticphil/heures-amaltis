@@ -100,7 +100,7 @@ details[open] summary{margin-bottom:12px}
 <div class="wrap">
   <header class="top">
     <div>
-      <div class="label">Amaltis · Feuille de temps</div>
+      <div class="label">Amaltis · Feuille de temps <span style="opacity:.6">· v6</span></div>
       <h1>Heures</h1>
     </div>
     <div class="who" id="who" hidden>Philippe Brunelle<br><button type="button" class="link" id="btn-logout" style="font-size:.8rem;font-weight:500">Se déconnecter</button></div>
@@ -169,15 +169,15 @@ details[open] summary{margin-bottom:12px}
     </section>
 
     <section class="panel" aria-labelledby="h-hist">
-      <h2 id="h-hist">Paies envoyées à Marc</h2>
-      <p class="muted" style="margin:0;font-size:.85rem">Un samedi sur deux, vers 23 h, la feuille de temps est remplie, enregistrée dans « heures amaltis » et un brouillon est préparé dans Gmail pour <span id="mail"></span>. Vous le vérifiez et l'envoyez.</p>
+      <h2 id="h-hist">Paies envoyées</h2>
+      <p class="muted" style="margin:0;font-size:.85rem">Quand votre semaine est finie, appuyez sur <b>Envoyer</b> : la feuille de temps est enregistrée dans « heures amaltis » et le courriel pour <span id="mail"></span> est prêt dans vos brouillons Gmail. Vous n’avez qu’à l’envoyer. Si vous oubliez, le brouillon est préparé le samedi de fin de paie, vers 23 h.</p>
       <ul class="hist" id="hist"></ul>
     </section>
   </div>
 </div>
-<button type="button" class="fab" id="btn-send" hidden aria-label="Préparer le courriel de la feuille de temps pour Marc">
+<button type="button" class="fab" id="btn-send" hidden aria-label="Envoyer la feuille de temps">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
-  <span id="btn-send-label">Envoyer à Marc</span>
+  <span id="btn-send-label">Envoyer</span>
 </button>
 <div class="toast" id="toast" hidden></div>
 
@@ -364,8 +364,6 @@ function render(){
   $('hist').innerHTML=(d.historique||[]).map(h=>'<li><span>'+fd(h.debut)+' au '+fd(h.fin)+'<br><span class="muted" style="font-size:.8rem">'+(h.brouillon||'')+'</span></span>'+
     '<span style="text-align:right">'+(h.fichier?'<a href="'+h.fichier+'" target="_blank" rel="noopener">Feuille</a> · ':'')+'banque <b>'+H(Number(String(h.nouvelleBanque).replace(',','.')))+' h</b></span></li>').join('')||'<li class="muted">Aucune paie pour le moment.</li>';
   if(!$('a-date').value) $('a-date').value=d.aujourdhui;
-  const deja=(d.historique||[]).find(h=>h.debut===p.debut);
-  if(!sending) $('btn-send-label').textContent=deja?'Renvoyer à Marc':'Envoyer à Marc';
   $('btn-send').hidden=false;
   renderClock();
 }
@@ -417,26 +415,26 @@ $('btn-punch').addEventListener('click',()=>{
   toast((type==='entree'?'Entrée':'Sortie')+' à '+it.heure);
   enqueue(it);
 });
-/* ---------- Envoyer à Marc : feuille Excel + brouillon Gmail pour la paie en cours ---------- */
+/* ---------- Envoyer : feuille Excel + courriel à Marc pour la paie en cours ---------- */
 let sending=false;
 $('btn-send').addEventListener('click',async()=>{
   const v=view(); if(!v||sending) return;
   if(qGet().length){ schedule(0); toast('Des changements partent encore : réessayez dans quelques secondes.'); return; }
-  const p=v.paie, deja=(v.historique||[]).some(h=>h.debut===p.debut);
-  const reste=v.aujourdhui<p.fin;
-  const msg=(deja?'Refaire':'Préparer')+' le courriel pour Marc, paie du '+fd(p.debut)+' au '+fd(p.fin)+' ?\n\n'+
+  const p=v.paie, deja=(v.historique||[]).find(h=>h.debut===p.debut&&/^Brouillon/.test(h.brouillon||''));
+  const msg='Préparer le courriel de la feuille de temps dans vos brouillons Gmail (pour '+(v.courriel||'Marc')+') ?\n\n'+
+    'Paie du '+fd(p.debut)+' au '+fd(p.fin)+'\n'+
     'Total : '+H(p.total)+' h'+(p.feriees?' (dont '+H(p.feriees)+' h fériées)':'')+'\n'+
     'Banque à reporter : '+(p.nouvelleBanque==null?'–':H(p.nouvelleBanque)+' h')+
-    (reste?'\n\nLes jours restants jusqu’au '+fd(p.fin)+' ne seront pas comptés.':'')+
-    (deja?'\n\nLa feuille sera remplacée ; supprimez l’ancien brouillon dans Gmail.':'')+
-    (v.ouvert?'\n\nAttention : un quart est encore en cours (sortie non pointée).':'');
+    (v.aujourdhui<p.fin?'\n\nLes jours qui restent jusqu’au '+fd(p.fin)+' ne seront pas comptés.':'')+
+    (v.ouvert?'\n\nAttention : un quart est encore en cours (sortie non pointée).':'')+
+    (deja?'\n\nUn brouillon a déjà été préparé pour cette paie ('+deja.brouillon.replace(/^Brouillon Gmail /,'')+'). Un nouveau sera fait avec la feuille à jour : supprimez l’ancien dans Gmail.':'');
   if(!confirm(msg)) return;
   sending=true; $('btn-send').disabled=true; $('btn-send-label').textContent='Préparation…';
   try{
     const d=await call('preparerPaie',S.code,p.debut); apply(d);
-    toast('Brouillon prêt dans Gmail : ouvrez-le et envoyez-le'+(d.prepare&&d.prepare.sortieManquante?' (sortie manquante !)':''));
+    toast('Brouillon prêt dans Gmail'+(d.prepare&&d.prepare.sortieManquante?' (sortie manquante !)':''));
   }catch(err){ toast(err.message==='RESEAU'?'Pas de réseau : réessayez.':err.message); }
-  finally{ sending=false; $('btn-send').disabled=false; render(); }
+  finally{ sending=false; $('btn-send').disabled=false; $('btn-send-label').textContent='Envoyer'; render(); }
 });
 $('btn-prep-prev').addEventListener('click',async e=>{
   if(!S.d) return;
