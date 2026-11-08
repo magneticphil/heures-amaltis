@@ -1,315 +1,400 @@
-<!doctype html>
-<html lang="fr-CA">
+<!DOCTYPE html>
+<html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#143c35">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Heures</title>
+<meta name="theme-color" content="#3f5a8a">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Heures Amaltis</title>
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Heures">
+<link rel="apple-touch-icon" href="icone-180.png">
+<link rel="icon" type="image/png" href="icone-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-:root{font-family:system-ui,sans-serif;color:#143c35;background:#edf3ef;color-scheme:light}
-*{box-sizing:border-box} body{margin:0} main{max-width:38rem;margin:auto;padding:2rem 1rem}
-header{margin-bottom:1.4rem} header p{margin:0;text-transform:uppercase;letter-spacing:.16em;font-size:.75rem;font-weight:700}
-h1{font-size:clamp(2rem,8vw,3rem);margin:.25rem 0} h2{margin:0 0 .75rem;font-size:1.2rem}
-section{background:white;border:1px solid #d7e4dc;border-radius:1rem;padding:1.2rem;margin-bottom:1rem}
-label{display:block;font-weight:600;margin:.75rem 0 .25rem} input,select,button{font:inherit;min-height:2.8rem;border-radius:.6rem}
-input,select{width:100%;border:1px solid #80998d;padding:.55rem .65rem}
-button{border:0;background:#143c35;color:white;padding:.65rem .95rem;font-weight:700;cursor:pointer}
-button:disabled{opacity:.55;cursor:default} button.secondary{background:#e0eee6;color:#143c35}
-button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #528961;outline-offset:2px}
-.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem}.actions button{flex:1}
-#status{min-height:1.5rem;overflow-wrap:anywhere} #status[data-error=true]{color:#a1252c}
-ul{padding-left:1.2rem} li{margin:.4rem 0} details{margin-top:1rem} summary{cursor:pointer;font-weight:650}
-nav.actions{margin:0 0 1rem}
-nav button[aria-pressed="false"]{background:#e0eee6;color:#143c35}
+:root{
+  --bg:#f3f5f6; --surface:#ffffff; --sunk:#e8ecee; --line:#d3dadd;
+  --ink:#16232a; --muted:#5b6b73; --accent:#3f5a8a; --accent-ink:#ffffff; --accent-soft:#e1e7f2;
+  --out:#a4462f; --out-soft:#f6e3dd; --warn:#a45f12; --warn-soft:#f7ead8; --ok:#2f6e4a;
+  --f-display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:10px; color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0f171b; --surface:#16222a; --sunk:#1c2b33; --line:#2a3b44;
+  --ink:#e4ecef; --muted:#93a5ad; --accent:#8fa8d6; --accent-ink:#0e1a2e; --accent-soft:#1e2b42;
+  --out:#e48a72; --out-soft:#3a221b; --warn:#e3a35a; --warn-soft:#3a2a17; --ok:#7cc79b; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-text-size-adjust:100%}
 [hidden]{display:none!important}
+.wrap{max-width:640px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:calc(12px + env(safe-area-inset-top,0px)) calc(48px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:16px}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;margin:0;letter-spacing:.01em}
+h1{font-size:1.6rem} h2{font-size:1.25rem} h3{font-size:1.05rem}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.muted{color:var(--muted)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+header.top .who{font-size:.85rem;color:var(--muted);text-align:right}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:14px}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.row3{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px}
+input[type=date],input[type=time],input[type=password],input[type=text]{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);min-height:46px;font-size:16px}
+.btn{border:0;border-radius:8px;padding:12px 16px;font-weight:600;background:var(--sunk)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);font-size:1.05rem;padding:15px}
+.btn.small{padding:7px 12px;font-size:.85rem}
+.btn.danger{background:var(--out-soft);color:var(--out)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.link{background:none;border:0;color:var(--accent);font-weight:600;padding:0;text-decoration:underline;text-underline-offset:3px}
+.clock{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.clock .now{font-family:var(--f-display);font-size:3.2rem;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.clock .state{font-size:.95rem;color:var(--muted)}
+.clock .state b{color:var(--ink)}
+.punch{width:100%;border:0;border-radius:14px;padding:22px 16px;font-family:var(--f-display);font-size:1.8rem;font-weight:700;letter-spacing:.02em;background:var(--accent);color:var(--accent-ink)}
+.punch.out{background:var(--out);color:#fff}
+.punch:disabled{opacity:.55}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{display:flex;flex-direction:column;gap:2px;min-width:0}
+.stat b{font-family:var(--f-display);font-size:1.7rem;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
+.stat b small{font-size:.9rem;color:var(--muted);font-weight:500}
+.bank{border-top:1px dashed var(--line);padding-top:12px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline}
+.bank b{font-family:var(--f-display);font-size:1.3rem;font-variant-numeric:tabular-nums;color:var(--ink)}
+.days{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.days li{border-bottom:1px solid var(--line)}
+.days li:last-child{border-bottom:0}
+.days li.wkend .dn{color:var(--muted)}
+.days li.today{background:var(--accent-soft);border-radius:8px}
+.dayrow{width:100%;display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center;padding:9px 8px;background:none;border:0;text-align:left}
+.dayrow .dn{font-weight:600}
+.dayrow .dn small{font-weight:500;color:var(--muted);margin-left:6px}
+.dayrow .h{font-family:var(--f-display);font-size:1.25rem;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.dayrow .q{grid-column:1/-1;font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.tag{display:inline-block;font-size:.72rem;font-weight:600;border-radius:999px;padding:1px 8px;background:var(--warn-soft);color:var(--warn);margin-left:6px;vertical-align:1px}
+.tag.open{background:var(--out-soft);color:var(--out)}
+.tag.q{background:var(--sunk);color:var(--muted)}
+.edit{padding:4px 8px 12px;display:flex;flex-direction:column;gap:10px}
+.edit .shift{display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:center}
+.weeksep{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;padding:12px 8px 4px}
+.banner{padding:12px 14px;border-radius:8px;background:var(--warn-soft);color:var(--warn);font-size:.9rem}
+.hist{list-style:none;margin:0;padding:0}
+.hist li{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:.9rem;flex-wrap:wrap}
+.hist li:last-child{border-bottom:0}
+.hist b{font-family:var(--f-display);font-size:1.15rem}
+details summary{cursor:pointer;font-weight:600;color:var(--accent)}
+details[open] summary{margin-bottom:12px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:999px;font-weight:600;font-size:.92rem;z-index:20;max-width:calc(100% - 32px);text-align:center}
+@media (max-width:420px){.stats{grid-template-columns:1fr 1fr}.stats .stat:last-child{grid-column:1/-1}.row3{grid-template-columns:1fr 1fr}.row3 .field:first-child{grid-column:1/-1}}
 </style>
 </head>
 <body>
-<main>
-<header><p>Pointage</p><h1>Heures Amaltis</h1></header>
-<p id="status" role="status" aria-live="polite">Connexion au service…</p>
-<section id="access">
-  <h2>Accès personnel</h2>
-  <p id="access-help">Le code donne accès à tes pointages.</p>
-  <form id="login">
-    <label for="code">Code personnel</label>
-    <input id="code" type="password" required maxlength="40" autocomplete="current-password" autocapitalize="none" spellcheck="false" aria-describedby="access-help">
-    <div class="actions"><button id="sign-in">Se connecter</button></div>
-  </form>
-</section>
-<div id="dashboard" hidden>
-  <nav class="actions" aria-label="Sections de pointage">
-    <button id="show-punch" type="button" aria-pressed="true" aria-controls="punch-panel">Pointage</button>
-    <button id="show-edit" type="button" aria-pressed="false" aria-controls="edit-panel">Corriger les heures</button>
-  </nav>
-  <div id="punch-panel">
-  <section>
-    <h2>Mon quart</h2>
-    <p id="shift"></p>
-    <div class="actions">
-      <button id="start" type="button">Pointer l’entrée</button>
-      <button id="end" type="button">Pointer la sortie</button>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="label">Amaltis · Feuille de temps</div>
+      <h1>Heures</h1>
     </div>
-    <div class="actions">
-      <button id="refresh" class="secondary" type="button">Actualiser</button>
-      <button id="logout" class="secondary" type="button">Se déconnecter</button>
-    </div>
-  </section>
-  <section>
-    <h2>Période de paie</h2>
-    <p id="period"></p>
-    <p id="total"></p>
-    <details><summary>Voir les quarts</summary><ul id="shifts"></ul></details>
-  </section>
-  </div>
-  <section id="edit-panel" hidden>
-    <h2>Corriger les heures</h2>
-    <p id="no-shifts" hidden>Aucun quart à corriger dans la période actuelle ou précédente.</p>
-    <form id="edit-shift" hidden>
-      <label for="selected-shift">Quart à corriger</label>
-      <select id="selected-shift" required></select>
-      <label for="edit-start">Heure d’entrée</label>
-      <input id="edit-start" type="time" required>
-      <label for="edit-end">Heure de sortie</label>
-      <input id="edit-end" type="time" aria-describedby="edit-hint">
-      <p id="edit-hint">Laisse la sortie vide si le quart est en cours. Une sortie avant l’entrée est comptée le lendemain.</p>
-      <div class="actions"><button id="save-edit" type="submit">Enregistrer la correction</button></div>
+    <div class="who" id="who" hidden>Philippe Brunelle<br><button type="button" class="link" id="btn-logout" style="font-size:.8rem;font-weight:500">Se déconnecter</button></div>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <!-- CONNEXION -->
+  <section id="v-login" class="panel" aria-labelledby="h-login">
+    <h2 id="h-login">Identification</h2>
+    <form id="f-login" style="display:flex;flex-direction:column;gap:12px">
+      <div class="field"><label class="label" for="l-code" id="l-code-label">Code personnel</label><input id="l-code" type="password" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="40" required></div>
+      <button class="btn primary" type="submit" id="btn-login">Entrer</button>
+      <p class="muted" id="l-hint" style="margin:0;font-size:.85rem">Vous resterez identifié sur cet appareil.</p>
     </form>
   </section>
+
+  <!-- APP -->
+  <div id="v-app" hidden style="display:flex;flex-direction:column;gap:16px">
+    <section class="panel clock" aria-live="polite">
+      <div class="label" id="c-date"></div>
+      <div class="now" id="c-now">--:--</div>
+      <div class="state" id="c-state"></div>
+      <button type="button" class="punch" id="btn-punch" disabled>…</button>
+      <div class="muted" id="c-queue" style="font-size:.82rem" hidden></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-paie">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap">
+        <h2 id="h-paie">Paie en cours</h2><span class="muted" id="p-dates" style="font-size:.9rem"></span>
+      </div>
+      <div class="stats">
+        <div class="stat"><span class="label">Travaillées</span><b id="s-norm">–</b></div>
+        <div class="stat"><span class="label">Fériées</span><b id="s-fer">–</b></div>
+        <div class="stat"><span class="label">Total</span><b id="s-tot">–</b></div>
+      </div>
+      <div class="bank">
+        <span><span class="label">Banque reportée</span> <b id="b-old">–</b></span>
+        <span id="b-detail" class="muted" style="text-align:right"></span>
+      </div>
+      <ul class="days" id="days"></ul>
+      <details id="add">
+        <summary>Ajouter un quart oublié</summary>
+        <form id="f-add" style="display:flex;flex-direction:column;gap:10px">
+          <div class="row3">
+            <div class="field"><label class="label" for="a-date">Date</label><input type="date" id="a-date" required></div>
+            <div class="field"><label class="label" for="a-in">Entrée</label><input type="time" id="a-in" required></div>
+            <div class="field"><label class="label" for="a-out">Sortie</label><input type="time" id="a-out"></div>
+          </div>
+          <button class="btn" type="submit">Ajouter</button>
+        </form>
+      </details>
+    </section>
+
+    <section class="panel" aria-labelledby="h-prev">
+      <details id="prev">
+        <summary id="h-prev">Paie précédente</summary>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="muted" id="prev-dates" style="font-size:.9rem"></div>
+          <ul class="days" id="prev-days"></ul>
+          <p class="muted" id="prev-note" style="margin:0;font-size:.85rem" hidden>Cette paie a été faite à la main avant l'app (feuille déjà dans « heures amaltis »).</p>
+          <button class="btn" type="button" id="btn-prep-prev">Refaire la feuille et le brouillon de cette paie</button>
+          <p class="muted" style="margin:0;font-size:.82rem">Utile après une correction : remplace la feuille dans « heures amaltis » et prépare un nouveau brouillon (supprimez l'ancien dans Gmail).</p>
+        </div>
+      </details>
+    </section>
+
+    <section class="panel" aria-labelledby="h-hist">
+      <h2 id="h-hist">Paies envoyées à Marc</h2>
+      <p class="muted" style="margin:0;font-size:.85rem">Un samedi sur deux, vers 23 h, la feuille de temps est remplie, enregistrée dans « heures amaltis » et un brouillon est préparé dans Gmail pour <span id="mail"></span>. Vous le vérifiez et l'envoyez.</p>
+      <ul class="hist" id="hist"></ul>
+    </section>
+  </div>
 </div>
-</main>
+<div class="toast" id="toast" hidden></div>
+
 <script>
-'use strict';
-const endpoint = 'https://script.google.com/macros/s/AKfycby_5sAQLLS0ZqpoAoLi3XOjWV6uGGpTP-eC0xnqjqh34K8kdIKeRaOtlSqOULNGCbFC/exec';
+(() => {
 const $ = id => document.getElementById(id);
-const hours = new Intl.NumberFormat('fr-CA', { maximumFractionDigits: 2 });
-let code = '';
-let data;
-let busy = false;
-let pending;
-let editableShifts = new Map();
+const API_URL = 'https://script.google.com/macros/s/AKfycby_5sAQLLS0ZqpoAoLi3XOjWV6uGGpTP-eC0xnqjqh34K8kdIKeRaOtlSqOULNGCbFC/exec';
+const S = {code:null, d:null, open:null, busy:false};
+const store = {get:k=>{try{return localStorage.getItem(k)}catch(e){return null}}, set:(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}};
+const JOURS=['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
+const MOIS=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+const nf = new Intl.NumberFormat('fr-CA',{minimumFractionDigits:0,maximumFractionDigits:2});
+const H = v => v==null ? '–' : nf.format(v);
+const pad = n => String(n).padStart(2,'0');
+const localDate = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const localTime = d => pad(d.getHours())+':'+pad(d.getMinutes());
+const dObj = s => { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); };
+const fd = s => { const d=dObj(s); return d.getDate()+' '+MOIS[d.getMonth()]; };
+const fdl = s => { const d=dObj(s); return JOURS[d.getDay()]+' '+d.getDate()+' '+MOIS[d.getMonth()]; };
+const dur = min => Math.floor(min/60)+' h '+pad(min%60);
+const toMin = h => { const [a,b]=h.split(':').map(Number); return a*60+b; };
 
-async function request(fn, ...args) {
-  let response;
-  try {
-    response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-      body: JSON.stringify({ fn, args }),
-      signal: AbortSignal.timeout(30000)
-    });
-  } catch {
-    throw new Error('Le service ne répond pas. Réessaie dans un instant.');
-  }
-  if (!response.ok) throw new Error('Le service est temporairement indisponible.');
-  const result = await response.json().catch(() => null);
-  if (!result || typeof result.ok !== 'boolean') throw new Error('Réponse inattendue du service.');
-  if (!result.ok) {
-    const error = new Error(result.error || 'La demande a échoué.');
-    error.rejected = true;
-    throw error;
-  }
-  return result.data;
+/* ---------- serveur ---------- */
+function call(fn, ...args){
+  const envoi=()=>fetch(API_URL,{method:'POST',body:JSON.stringify({fn,args}),redirect:'follow'})
+    .then(r=>{ if(!r.ok) throw new Error('Erreur réseau ('+r.status+')'); return r.json(); });
+  const lecture=['getData','etat'].includes(fn);
+  return envoi().catch(e=>{ if(!lecture) throw e; return new Promise(ok=>setTimeout(ok,1500)).then(envoi); })
+    .catch(()=>{ throw new Error('RESEAU'); })
+    .then(j=>{ if(!j.ok) throw new Error(j.error); return j.data; });
 }
+if('serviceWorker' in navigator && /github\.io$/.test(location.hostname)) navigator.serviceWorker.register('sw.js').catch(()=>{});
 
-function status(message, error = false) {
-  $('status').textContent = message;
-  $('status').dataset.error = error;
-}
+function banner(t){ $('banner').textContent=t||''; $('banner').hidden=!t; }
+let toastT; function toast(t){ $('toast').textContent=t; $('toast').hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>$('toast').hidden=true,2600); }
 
-function controls() {
-  $('sign-in').disabled = busy;
-  for (const id of ['show-punch', 'show-edit', 'selected-shift', 'edit-start', 'edit-end']) {
-    $(id).disabled = busy;
-  }
-  $('save-edit').disabled = busy || Boolean(pending);
-  $('refresh').disabled = busy;
-  $('logout').disabled = busy;
-  $('start').disabled = busy || (pending ? pending.type !== 'entree' : Boolean(data?.ouvert));
-  $('end').disabled = busy || (pending ? pending.type !== 'sortie' : !data?.ouvert);
-  $('start').textContent = pending?.type === 'entree' ? 'Réessayer l’entrée' : 'Pointer l’entrée';
-  $('end').textContent = pending?.type === 'sortie' ? 'Réessayer la sortie' : 'Pointer la sortie';
-}
-
-async function run(action) {
-  if (busy) return;
-  busy = true;
-  controls();
-  try {
-    await action();
-  } catch (error) {
-    status(error.message, true);
-  } finally {
-    busy = false;
-    controls();
-  }
-}
-
-function dateLabel(value) {
-  return new Intl.DateTimeFormat('fr-CA', { dateStyle: 'medium', timeZone: 'UTC' })
-    .format(new Date(value + 'T12:00:00Z'));
-}
-
-function render(next) {
-  data = next;
-  $('access').hidden = true;
-  $('dashboard').hidden = false;
-  $('shift').textContent = data.ouvert
-    ? 'En cours depuis ' + data.ouvert.entree + ' le ' + dateLabel(data.ouvert.date) + '.'
-    : 'Aucun quart en cours.';
-  $('period').textContent = 'Du ' + dateLabel(data.paie.debut) + ' au ' + dateLabel(data.paie.fin);
-  $('total').textContent = hours.format(data.paie.total) + ' h au total';
-  const rows = data.paie.jours.flatMap(day => day.quarts.map(shift => {
-    const row = document.createElement('li');
-    row.textContent = dateLabel(day.date) + ' · ' + shift.entree + ' – ' + (shift.sortie || 'en cours');
-    return row;
-  }));
-  if (!rows.length) {
-    const row = document.createElement('li');
-    row.textContent = 'Aucun quart dans cette période.';
-    rows.push(row);
-  }
-  $('shifts').replaceChildren(...rows);
-  renderEditableShifts();
-  controls();
-}
-
-function showPanel(editing) {
-  $('punch-panel').hidden = editing;
-  $('edit-panel').hidden = !editing;
-  $('show-punch').setAttribute('aria-pressed', String(!editing));
-  $('show-edit').setAttribute('aria-pressed', String(editing));
-}
-
-function populateEditForm() {
-  const shift = editableShifts.get($('selected-shift').value);
-  $('edit-start').value = shift?.entree || '';
-  $('edit-end').value = shift?.sortie || '';
-}
-
-function renderEditableShifts() {
-  const select = $('selected-shift');
-  const previousSelection = select.value;
-  editableShifts = new Map();
-  const groups = [];
-  for (const [label, period] of [['Période actuelle', data.paie], ['Période précédente', data.precedente]]) {
-    const group = document.createElement('optgroup');
-    group.label = label;
-    for (const day of [...(period?.jours || [])].reverse()) {
-      for (const shift of day.quarts) {
-        editableShifts.set(shift.id, { ...shift, date: day.date });
-        const option = document.createElement('option');
-        option.value = shift.id;
-        option.textContent = dateLabel(day.date) + ' · ' + shift.entree + ' – ' + (shift.sortie || 'en cours');
-        group.append(option);
+/* ---------- file d'envoi des pointages ----------
+   Un toucher Entrée/Sortie est affiché aussitôt et gardé sur le téléphone jusqu'à ce que
+   le serveur le confirme (réseau faible à la serre). L'heure enregistrée est celle du toucher. */
+const QK='hr.outbox';
+const qGet=()=>{ try{ const q=JSON.parse(store.get(QK)||'[]'); return Array.isArray(q)?q:[]; }catch(e){ return []; } };
+const qSet=q=>store.set(QK,q.length?JSON.stringify(q):null);
+let flushing=false, flushTimer=null, delay=3000;
+function schedule(ms){ clearTimeout(flushTimer); flushTimer=setTimeout(flush,ms); }
+async function flush(){
+  if(flushing||!S.code) return;
+  let q=qGet(); if(!q.length){ delay=3000; renderQueue(); return; }
+  flushing=true;
+  try{
+    while(q.length){
+      const it=q[0];
+      try{
+        const d=await call('pointer',S.code,it.type,it.date,it.heure,it.id);
+        q=qGet().filter(x=>x.id!==it.id); qSet(q); delay=3000; apply(d);
+      }catch(e){
+        if(e.message==='RESEAU'||/verrou|lock|temps|timeout/i.test(e.message)){ delay=Math.min(delay*2,120000); break; }
+        if(/Code invalide/.test(e.message)){ logout(); break; }
+        q=qGet().filter(x=>x.id!==it.id); qSet(q);
+        banner('Pointage '+(it.type==='entree'?'d’entrée':'de sortie')+' de '+it.heure+' refusé : '+e.message);
+        refresh();
       }
     }
-    if (group.childElementCount) groups.push(group);
+  } finally { flushing=false; if(qGet().length) schedule(delay); renderQueue(); renderClock(); }
+}
+window.addEventListener('online',()=>schedule(300));
+function renderQueue(){
+  const q=qGet(), el=$('c-queue');
+  el.hidden=!q.length;
+  if(q.length) el.textContent=q.length+' pointage'+(q.length>1?'s':'')+' en attente de réseau — envoi automatique.';
+}
+// État affiché = serveur + pointages encore en file
+function openState(){
+  let open=S.d&&S.d.ouvert ? {date:S.d.ouvert.date, entree:S.d.ouvert.entree} : null;
+  qGet().forEach(it=>{ if(it.type==='entree') open={date:it.date,entree:it.heure}; else open=null; });
+  return open;
+}
+
+/* ---------- affichage ---------- */
+function renderClock(){
+  const now=new Date();
+  $('c-now').textContent=localTime(now);
+  $('c-date').textContent=fdl(localDate(now));
+  const open=openState(), b=$('btn-punch');
+  if(open){
+    let min=Math.round((now-dObj(open.date))/60000)-toMin(open.entree); if(min<0) min=0;
+    $('c-state').innerHTML='Entré à <b>'+open.entree+'</b>'+(open.date!==localDate(now)?' ('+fd(open.date)+')':'')+' · '+dur(min);
+    b.textContent='Sortie'; b.className='punch out';
+  } else {
+    $('c-state').textContent='Pas entré pour le moment';
+    b.textContent='Entrée'; b.className='punch';
   }
-  select.replaceChildren(...groups);
-  if (editableShifts.has(previousSelection)) select.value = previousSelection;
-  $('no-shifts').hidden = editableShifts.size > 0;
-  $('edit-shift').hidden = editableShifts.size === 0;
-  populateEditForm();
+  b.disabled=!S.d;
 }
+setInterval(renderClock,15000);
 
-$('show-punch').addEventListener('click', () => showPanel(false));
-$('show-edit').addEventListener('click', () => {
-  showPanel(true);
-  if (pending) status('Retourne dans Pointage pour confirmer le pointage en attente.');
-});
-$('selected-shift').addEventListener('change', populateEditForm);
-$('edit-shift').addEventListener('submit', event => {
-  event.preventDefault();
-  run(async () => {
-    if (pending) throw new Error('Confirme d’abord le pointage en attente.');
-    const shift = editableShifts.get($('selected-shift').value);
-    if (!shift) throw new Error('Choisis un quart à corriger.');
-    const start = $('edit-start').value;
-    const end = $('edit-end').value;
-    if (start === shift.entree && end === shift.sortie) {
-      status('Les heures sont déjà à jour.');
-      return;
-    }
-    status('Enregistrement de la correction…');
-    render(await request('modifierQuart', code, shift.id, shift.date, start, end));
-    status('Correction enregistrée.');
+function dayItems(jours, today, editable){
+  let html='';
+  jours.forEach((j,i)=>{
+    if(i===7) html+='<li class="weeksep">Deuxième semaine</li>';
+    if(i===0) html+='<li class="weeksep">Première semaine</li>';
+    const wd=dObj(j.date).getDay(), wk=wd===0||wd===6;
+    const qs=j.quarts.map(q=>q.entree+' – '+(q.sortie||'…')).join(' · ');
+    const tags=(j.ferie?'<span class="tag" title="8 h fériées">'+j.ferie+' +8 h</span>':'')+(j.quarts.some(q=>!q.sortie)?'<span class="tag open">en cours</span>':'');
+    const tot=(j.heures||0)+(j.heuresFeriees||0);
+    html+='<li class="'+(wk?'wkend ':'')+(j.date===today?'today':'')+'" data-date="'+j.date+'">'+
+      '<button type="button" class="dayrow"'+(editable?'':' disabled')+'><span class="dn">'+JOURS[wd]+'<small>'+fd(j.date)+'</small>'+tags+'</span>'+
+      '<span class="h">'+(j.quarts.length||j.heuresFeriees?H(tot):'')+'</span>'+
+      (qs?'<span class="q">'+qs+(j.quarts.length&&j.heures!==j.minutes/60?' · '+dur(j.minutes)+' → arrondi '+H(j.heures)+' h':'')+'</span>':'')+
+      '</button></li>';
   });
-});
-
-function clock() {
-  const parts = new Intl.DateTimeFormat('fr-CA', {
-    timeZone: 'America/Toronto', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  return { date: values.year + '-' + values.month + '-' + values.day, time: values.hour + ':' + values.minute };
+  return html;
 }
-
-function punch(type) {
-  run(async () => {
-    pending ||= { type, ...clock(), id: crypto.randomUUID() };
-    status('Enregistrement du pointage…');
-    let next;
-    try {
-      next = await request('pointer', code, pending.type, pending.date, pending.time, pending.id);
-    } catch (error) {
-      if (error.rejected) pending = undefined;
-      throw error;
-    }
-    pending = undefined;
-    render(next);
-    status(type === 'entree' ? 'Entrée enregistrée.' : 'Sortie enregistrée.');
-  });
+function render(){
+  const d=S.d; if(!d) return;
+  const p=d.paie;
+  $('p-dates').textContent='du '+fd(p.debut)+' au '+fd(p.fin);
+  $('s-norm').innerHTML=H(p.normales)+' <small>h</small>';
+  $('s-fer').innerHTML=H(p.feriees)+' <small>h</small>';
+  $('s-tot').innerHTML=H(p.total)+' <small>/ '+H(p.payees)+'</small>';
+  // Règle de la paie : nouvelle banque = banque reportée + (total − 80 h). Rien n'est retiré en cours de route.
+  $('b-old').textContent=p.banqueReportee==null?'–':H(p.banqueReportee)+' h';
+  const diff=p.total-p.payees;
+  if(diff<0) $('b-detail').innerHTML='Encore <b>'+H(-diff)+' h</b> pour atteindre '+H(p.payees)+' h';
+  else $('b-detail').innerHTML='<b>+'+H(diff)+' h</b> à mettre en banque'+(p.banqueReportee==null?'':' → <b>'+H(p.nouvelleBanque)+' h</b>');
+  $('days').innerHTML=dayItems(p.jours,d.aujourdhui,true);
+  $('prev-dates').textContent='Du '+fd(d.precedente.debut)+' au '+fd(d.precedente.fin)+' · total '+H(d.precedente.total)+' h';
+  const avantApp=d.reference&&d.precedente.debut<d.reference;
+  $('prev-days').innerHTML=dayItems(d.precedente.jours,d.aujourdhui,!avantApp);
+  $('btn-prep-prev').hidden=!!avantApp;
+  $('prev-note').hidden=!avantApp;
+  $('mail').textContent=d.courriel||'Marc';
+  $('hist').innerHTML=(d.historique||[]).map(h=>'<li><span>'+fd(h.debut)+' au '+fd(h.fin)+'<br><span class="muted" style="font-size:.8rem">'+(h.brouillon||'')+'</span></span>'+
+    '<span style="text-align:right">'+(h.fichier?'<a href="'+h.fichier+'" target="_blank" rel="noopener">Feuille</a> · ':'')+'banque <b>'+H(Number(String(h.nouvelleBanque).replace(',','.')))+' h</b></span></li>').join('')||'<li class="muted">Aucune paie pour le moment.</li>';
+  if(!$('a-date').value) $('a-date').value=d.aujourdhui;
+  renderClock();
 }
+function apply(d){ S.d=d; try{ store.set('hr.snap',JSON.stringify(d)); }catch(e){} render(); }
 
-$('login').addEventListener('submit', event => {
-  event.preventDefault();
-  run(async () => {
-    const candidate = $('code').value.trim();
-    if (!candidate) throw new Error('Entre ton code personnel.');
-    status('Vérification du code…');
-    const state = await request('etat');
-    if (!state.codeDefini) {
-      throw new Error('Le code personnel doit être configuré par le propriétaire avant la première connexion.');
-    }
-    const next = await request('getData', candidate);
-    code = candidate;
-    $('login').reset();
-    render(next);
-    status('Connecté.');
-  });
+/* ---------- correction d'une journée ---------- */
+function allDays(){ return S.d ? S.d.paie.jours.concat(S.d.precedente.jours) : []; }
+document.addEventListener('click',e=>{
+  const row=e.target.closest('.dayrow'); if(!row||row.disabled) return;
+  const li=row.closest('li'), date=li.dataset.date;
+  const open=li.querySelector('.edit'); document.querySelectorAll('.edit').forEach(x=>x.remove()); if(open) return;
+  const j=allDays().find(x=>x.date===date); if(!j) return;
+  const box=document.createElement('div'); box.className='edit';
+  box.innerHTML=j.quarts.map(q=>'<div class="shift" data-id="'+q.id+'"><input type="time" value="'+q.entree+'" aria-label="Entrée"><input type="time" value="'+(q.sortie||'')+'" aria-label="Sortie">'+
+      '<button class="btn small" data-act="save">OK</button><button class="btn small danger" data-act="del">Suppr.</button></div>').join('')+
+    '<div class="shift" data-new="1"><input type="time" aria-label="Entrée"><input type="time" aria-label="Sortie"><button class="btn small" data-act="add" style="grid-column:span 2">Ajouter un quart</button></div>'+
+    '<div class="muted" style="font-size:.8rem">Heures arrondies au quart d’heure le plus proche, par journée.</div>';
+  li.appendChild(box);
 });
-$('start').addEventListener('click', () => punch('entree'));
-$('end').addEventListener('click', () => punch('sortie'));
-$('refresh').addEventListener('click', () => run(async () => {
-  render(await request('getData', code));
-  status(pending ? 'Pointage à confirmer. Utilise le bouton Réessayer.' : 'Pointages actualisés.');
-}));
-$('logout').addEventListener('click', () => {
-  code = '';
-  data = undefined;
-  pending = undefined;
-  $('shift').textContent = '';
-  $('period').textContent = '';
-  $('total').textContent = '';
-  $('shifts').replaceChildren();
-  editableShifts.clear();
-  $('selected-shift').replaceChildren();
-  $('edit-shift').reset();
-  showPanel(false);
-  $('dashboard').hidden = true;
-  $('access').hidden = false;
-  status('Déconnecté.');
-  $('code').focus();
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('.edit button'); if(!b) return;
+  const sh=b.closest('.shift'), li=b.closest('li'), date=li.dataset.date;
+  const [i1,i2]=sh.querySelectorAll('input'), act=b.dataset.act;
+  if((act==='save'||act==='add')&&!i1.value){ toast('Indiquez l’heure d’entrée'); return; }
+  if(act==='del'&&!confirm('Supprimer ce quart ?')) return;
+  b.disabled=true;
+  try{
+    let d;
+    if(act==='save') d=await call('modifierQuart',S.code,sh.dataset.id,date,i1.value,i2.value);
+    if(act==='del') d=await call('supprimerQuart',S.code,sh.dataset.id);
+    if(act==='add') d=await call('ajouterQuart',S.code,date,i1.value,i2.value,'man-'+Date.now()+'-'+Math.random().toString(36).slice(2,7));
+    apply(d); toast('Enregistré'); banner('');
+  }catch(err){ b.disabled=false; toast(err.message==='RESEAU'?'Pas de réseau : réessayez.':err.message); }
 });
-run(async () => {
-  const state = await request('etat');
-  status(state.codeDefini
-    ? 'Entre ton code personnel.'
-    : 'Le code personnel doit être configuré par le propriétaire.');
+$('f-add').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const btn=e.target.querySelector('button'); btn.disabled=true;
+  try{ const d=await call('ajouterQuart',S.code,$('a-date').value,$('a-in').value,$('a-out').value,'man-'+Date.now()+'-'+Math.random().toString(36).slice(2,7));
+    apply(d); $('a-in').value=''; $('a-out').value=''; $('add').open=false; toast('Quart ajouté'); }
+  catch(err){ toast(err.message==='RESEAU'?'Pas de réseau : réessayez.':err.message); }
+  finally{ btn.disabled=false; }
 });
+
+/* ---------- pointer ---------- */
+$('btn-punch').addEventListener('click',()=>{
+  const now=new Date(), type=openState()?'sortie':'entree';
+  const it={id:'p-'+now.getTime()+'-'+Math.random().toString(36).slice(2,7), type, date:localDate(now), heure:localTime(now), t:now.getTime()};
+  const q=qGet(); q.push(it); qSet(q);
+  if(navigator.vibrate) navigator.vibrate(30);
+  toast((type==='entree'?'Entrée':'Sortie')+' à '+it.heure);
+  renderClock(); renderQueue(); schedule(0);
+});
+$('btn-prep-prev').addEventListener('click',async e=>{
+  if(!S.d) return;
+  if(!confirm('Refaire la feuille de temps du '+fd(S.d.precedente.debut)+' au '+fd(S.d.precedente.fin)+' et préparer un nouveau brouillon pour Marc ?')) return;
+  const b=e.target; b.disabled=true; b.textContent='Préparation en cours…';
+  try{ const d=await call('preparerPaie',S.code,S.d.precedente.debut); apply(d);
+    toast('Feuille et brouillon prêts'+(d.prepare&&d.prepare.sortieManquante?' (sortie manquante !)':'')); }
+  catch(err){ toast(err.message==='RESEAU'?'Pas de réseau : réessayez.':err.message); }
+  finally{ b.disabled=false; b.textContent='Refaire la feuille et le brouillon de cette paie'; }
+});
+
+/* ---------- connexion ---------- */
+async function refresh(){
+  if(!S.code||flushing) return;
+  try{ const d=await call('getData',S.code); if(!flushing) apply(d); banner(''); }
+  catch(e){ if(/Code invalide|Code non défini/.test(e.message)) logout(); else if(e.message==='RESEAU') banner('Pas de réseau : affichage des dernières données connues.'); else banner(e.message); }
+}
+function showApp(){ $('v-login').hidden=true; $('v-app').hidden=false; $('who').hidden=false; }
+function logout(){ S.code=null; store.set('hr.code',null); store.set('hr.snap',null); $('v-app').hidden=true; $('who').hidden=true; $('v-login').hidden=false; prepLogin(); }
+$('btn-logout').addEventListener('click',()=>{ if(qGet().length&&!confirm('Des pointages attendent encore le réseau. Se déconnecter quand même ?')) return; qSet([]); logout(); });
+async function prepLogin(){
+  try{ const e=await call('etat'); if(!e.codeDefini){ $('l-code-label').textContent='Choisissez votre code personnel'; $('l-hint').textContent='Premier lancement : ce code (4 caractères ou plus) protégera l’app.'; $('btn-login').textContent='Créer le code'; } }
+  catch(e){}
+}
+$('f-login').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const code=$('l-code').value.trim(), btn=$('btn-login'); btn.disabled=true;
+  try{ const d=await call('connexion',code); S.code=code; store.set('hr.code',code); $('l-code').value=''; showApp(); apply(d); schedule(0); banner(''); }
+  catch(err){ banner(err.message==='RESEAU'?'Connexion impossible. Vérifiez le réseau.':err.message); }
+  finally{ btn.disabled=false; }
+});
+
+/* ---------- démarrage ---------- */
+S.code=store.get('hr.code');
+if(S.code){
+  showApp();
+  try{ const snap=JSON.parse(store.get('hr.snap')||'null'); if(snap){ S.d=snap; render(); } }catch(e){}
+  renderQueue(); renderClock(); refresh(); schedule(500);
+} else prepLogin();
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&S.code){ renderClock(); refresh(); schedule(0); } });
+})();
 </script>
 </body>
 </html>
