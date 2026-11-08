@@ -206,14 +206,33 @@ if('serviceWorker' in navigator && /github\.io$/.test(location.hostname)) naviga
 function banner(t){ $('banner').textContent=t||''; $('banner').hidden=!t; }
 let toastT; function toast(t){ $('toast').textContent=t; $('toast').hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>$('toast').hidden=true,2600); }
 
-/* ---------- file d'envoi des pointages ----------
-   Un toucher Entrée/Sortie est affiché aussitôt et gardé sur le téléphone jusqu'à ce que
-   le serveur le confirme (réseau faible à la serre). L'heure enregistrée est celle du toucher. */
+/* ---------- file d'envoi (envoi optimiste) ----------
+   Pointages, ajouts, corrections et suppressions s'affichent aussitôt et restent sur le téléphone
+   jusqu'à ce que le serveur les confirme (réseau faible à la serre). L'heure d'un pointage est celle du toucher. */
 const QK='hr.outbox';
 const qGet=()=>{ try{ const q=JSON.parse(store.get(QK)||'[]'); return Array.isArray(q)?q:[]; }catch(e){ return []; } };
 const qSet=q=>store.set(QK,q.length?JSON.stringify(q):null);
+const opOf=it=>it.op||'pointer';
+const newId=pfx=>pfx+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
+function enqueue(it){ const q=qGet(); q.push(it); qSet(q); render(); renderQueue(); schedule(0); }
 let flushing=false, flushTimer=null, delay=3000;
 function schedule(ms){ clearTimeout(flushTimer); flushTimer=setTimeout(flush,ms); }
+function send(it){
+  switch(opOf(it)){
+    case 'pointer':   return call('pointer',S.code,it.type,it.date,it.heure,it.id);
+    case 'ajouter':   return call('ajouterQuart',S.code,it.date,it.entree,it.sortie||'',it.id);
+    case 'modifier':  return call('modifierQuart',S.code,it.qid,it.date,it.entree,it.sortie||'');
+    case 'supprimer': return call('supprimerQuart',S.code,it.qid);
+  }
+  return Promise.reject(new Error('demande invalide'));
+}
+function libelle(it){
+  const op=opOf(it);
+  if(op==='pointer') return 'Pointage '+(it.type==='entree'?'d’entrée':'de sortie')+' de '+it.heure;
+  if(op==='ajouter') return 'Ajout du quart du '+fd(it.date);
+  if(op==='modifier') return 'Correction du quart du '+fd(it.date);
+  return 'Suppression d’un quart';
+}
 async function flush(){
   if(flushing||!S.code) return;
   let q=qGet(); if(!q.length){ delay=3000; renderQueue(); return; }
@@ -222,30 +241,63 @@ async function flush(){
     while(q.length){
       const it=q[0];
       try{
-        const d=await call('pointer',S.code,it.type,it.date,it.heure,it.id);
+        const d=await send(it);
         q=qGet().filter(x=>x.id!==it.id); qSet(q); delay=3000; apply(d);
       }catch(e){
         if(e.message==='RESEAU'||/verrou|lock|temps|timeout/i.test(e.message)){ delay=Math.min(delay*2,120000); break; }
         if(/Code invalide/.test(e.message)){ logout(); break; }
         q=qGet().filter(x=>x.id!==it.id); qSet(q);
-        banner('Pointage '+(it.type==='entree'?'d’entrée':'de sortie')+' de '+it.heure+' refusé : '+e.message);
-        refresh();
+        // une suppression déjà faite n'est pas une erreur
+        if(!(opOf(it)==='supprimer'&&/introuvable/.test(e.message))) banner(libelle(it)+' refusé : '+e.message);
+        render(); refresh();
       }
     }
-  } finally { flushing=false; if(qGet().length) schedule(delay); renderQueue(); renderClock(); }
+  } finally { flushing=false; if(qGet().length) schedule(delay); renderQueue(); render(); }
 }
 window.addEventListener('online',()=>schedule(300));
 function renderQueue(){
   const q=qGet(), el=$('c-queue');
   el.hidden=!q.length;
-  if(q.length) el.textContent=q.length+' pointage'+(q.length>1?'s':'')+' en attente de réseau — envoi automatique.';
+  if(q.length) el.textContent=q.length+' changement'+(q.length>1?'s':'')+' en cours d’envoi — automatique, même sans réseau.';
 }
-// État affiché = serveur + pointages encore en file
-function openState(){
-  let open=S.d&&S.d.ouvert ? {date:S.d.ouvert.date, entree:S.d.ouvert.entree} : null;
-  qGet().forEach(it=>{ if(it.type==='entree') open={date:it.date,entree:it.heure}; else open=null; });
-  return open;
+
+/* Vue affichée = dernières données du serveur + changements encore en file, recalculés ici
+   avec les mêmes règles que le serveur (arrondi au quart d'heure par journée). */
+const qmin=q=>{ if(!q.sortie) return 0; let m=toMin(q.sortie)-toMin(q.entree); if(m<0) m+=1440; return m; };
+function recalc(per){
+  per.jours.forEach(j=>{
+    j.quarts.forEach(q=>q.minutes=qmin(q));
+    j.quarts.sort((a,b)=>a.entree<b.entree?-1:1);
+    j.minutes=j.quarts.reduce((s,q)=>s+q.minutes,0);
+    j.heures=j.quarts.length?Math.round(j.minutes/15)*15/60:null;
+  });
+  per.normales=per.jours.reduce((s,j)=>s+(j.heures||0),0);
+  per.feriees=per.jours.reduce((s,j)=>s+(j.heuresFeriees||0),0);
+  per.total=per.normales+per.feriees;
 }
+function view(){
+  if(!S.d) return null;
+  const q=qGet(); if(!q.length) return S.d;
+  const v=JSON.parse(JSON.stringify(S.d));
+  const jours=()=>v.paie.jours.concat(v.precedente.jours);
+  const day=date=>jours().find(j=>j.date===date);
+  const find=id=>{ for(const j of jours()){ const i=j.quarts.findIndex(x=>x.id===id); if(i>=0) return {j,i,q:j.quarts[i]}; } return null; };
+  const ouverts=()=>jours().flatMap(j=>j.quarts.filter(x=>!x.sortie).map(x=>({j,q:x}))).sort((a,b)=>(a.j.date+a.q.entree<b.j.date+b.q.entree?1:-1));
+  q.forEach(it=>{
+    const op=opOf(it);
+    if(op==='pointer'){
+      if(it.type==='entree'){ const j=day(it.date); if(j) j.quarts.push({id:'tmp-'+it.id,entree:it.heure,sortie:''}); }
+      else { const o=ouverts()[0]; if(o) o.q.sortie=it.heure; }
+    } else if(op==='ajouter'){ const j=day(it.date); if(j) j.quarts.push({id:'tmp-'+it.id,entree:it.entree,sortie:it.sortie||''}); }
+    else if(op==='modifier'){ const f=find(it.qid); if(f){ f.j.quarts.splice(f.i,1); const j=day(it.date); if(j) j.quarts.push({id:it.qid,entree:it.entree,sortie:it.sortie||''}); } }
+    else if(op==='supprimer'){ const f=find(it.qid); if(f) f.j.quarts.splice(f.i,1); }
+  });
+  recalc(v.paie); recalc(v.precedente);
+  const p=v.paie; p.nouvelleBanque=p.banqueReportee==null?null:p.banqueReportee+p.total-p.payees;
+  const o=ouverts()[0]; v.ouvert=o?{id:o.q.id,date:o.j.date,entree:o.q.entree}:null;
+  return v;
+}
+function openState(){ const v=view(); return v&&v.ouvert ? {date:v.ouvert.date, entree:v.ouvert.entree} : null; }
 
 /* ---------- affichage ---------- */
 function renderClock(){
@@ -283,7 +335,7 @@ function dayItems(jours, today, editable){
   return html;
 }
 function render(){
-  const d=S.d; if(!d) return;
+  const d=view(); if(!d) return;
   const p=d.paie;
   $('p-dates').textContent='du '+fd(p.debut)+' au '+fd(p.fin);
   $('s-norm').innerHTML=H(p.normales)+' <small>h</small>';
@@ -309,7 +361,7 @@ function render(){
 function apply(d){ S.d=d; try{ store.set('hr.snap',JSON.stringify(d)); }catch(e){} render(); }
 
 /* ---------- correction d'une journée ---------- */
-function allDays(){ return S.d ? S.d.paie.jours.concat(S.d.precedente.jours) : []; }
+function allDays(){ const v=view(); return v ? v.paie.jours.concat(v.precedente.jours) : []; }
 document.addEventListener('click',e=>{
   const row=e.target.closest('.dayrow'); if(!row||row.disabled) return;
   const li=row.closest('li'), date=li.dataset.date;
@@ -322,38 +374,37 @@ document.addEventListener('click',e=>{
     '<div class="muted" style="font-size:.8rem">Heures arrondies au quart d’heure le plus proche, par journée.</div>';
   li.appendChild(box);
 });
-document.addEventListener('click',async e=>{
+document.addEventListener('click',e=>{
   const b=e.target.closest('.edit button'); if(!b) return;
   const sh=b.closest('.shift'), li=b.closest('li'), date=li.dataset.date;
-  const [i1,i2]=sh.querySelectorAll('input'), act=b.dataset.act;
+  const [i1,i2]=sh.querySelectorAll('input'), act=b.dataset.act, qid=sh.dataset.id;
   if((act==='save'||act==='add')&&!i1.value){ toast('Indiquez l’heure d’entrée'); return; }
   if(act==='del'&&!confirm('Supprimer ce quart ?')) return;
-  b.disabled=true;
-  try{
-    let d;
-    if(act==='save') d=await call('modifierQuart',S.code,sh.dataset.id,date,i1.value,i2.value);
-    if(act==='del') d=await call('supprimerQuart',S.code,sh.dataset.id);
-    if(act==='add') d=await call('ajouterQuart',S.code,date,i1.value,i2.value,'man-'+Date.now()+'-'+Math.random().toString(36).slice(2,7));
-    apply(d); toast('Enregistré'); banner('');
-  }catch(err){ b.disabled=false; toast(err.message==='RESEAU'?'Pas de réseau : réessayez.':err.message); }
+  if(act==='add'){ enqueue({op:'ajouter',id:newId('man'),date,entree:i1.value,sortie:i2.value}); toast('Quart ajouté'); }
+  else if(qid&&qid.startsWith('tmp-')){
+    // quart pas encore confirmé par le serveur : on modifie la demande en file
+    const q=qGet(), src=q.find(x=>'tmp-'+x.id===qid);
+    if(!src||opOf(src)!=='ajouter'){ toast('Ce pointage est en cours d’envoi : réessayez dans un instant.'); return; }
+    if(act==='del') qSet(q.filter(x=>x!==src)); else { src.entree=i1.value; src.sortie=i2.value; qSet(q); }
+    render(); renderQueue(); toast(act==='del'?'Quart supprimé':'Enregistré');
+  }
+  else if(act==='save'){ enqueue({op:'modifier',id:newId('mod'),qid,date,entree:i1.value,sortie:i2.value}); toast('Enregistré'); }
+  else if(act==='del'){ enqueue({op:'supprimer',id:newId('sup'),qid,date}); toast('Quart supprimé'); }
+  banner('');
 });
-$('f-add').addEventListener('submit',async e=>{
+$('f-add').addEventListener('submit',e=>{
   e.preventDefault();
-  const btn=e.target.querySelector('button'); btn.disabled=true;
-  try{ const d=await call('ajouterQuart',S.code,$('a-date').value,$('a-in').value,$('a-out').value,'man-'+Date.now()+'-'+Math.random().toString(36).slice(2,7));
-    apply(d); $('a-in').value=''; $('a-out').value=''; $('add').open=false; toast('Quart ajouté'); }
-  catch(err){ toast(err.message==='RESEAU'?'Pas de réseau : réessayez.':err.message); }
-  finally{ btn.disabled=false; }
+  enqueue({op:'ajouter',id:newId('man'),date:$('a-date').value,entree:$('a-in').value,sortie:$('a-out').value});
+  $('a-in').value=''; $('a-out').value=''; $('add').open=false; toast('Quart ajouté');
 });
 
 /* ---------- pointer ---------- */
 $('btn-punch').addEventListener('click',()=>{
   const now=new Date(), type=openState()?'sortie':'entree';
-  const it={id:'p-'+now.getTime()+'-'+Math.random().toString(36).slice(2,7), type, date:localDate(now), heure:localTime(now), t:now.getTime()};
-  const q=qGet(); q.push(it); qSet(q);
+  const it={op:'pointer', id:'p-'+now.getTime()+'-'+Math.random().toString(36).slice(2,7), type, date:localDate(now), heure:localTime(now), t:now.getTime()};
   if(navigator.vibrate) navigator.vibrate(30);
   toast((type==='entree'?'Entrée':'Sortie')+' à '+it.heure);
-  renderClock(); renderQueue(); schedule(0);
+  enqueue(it);
 });
 $('btn-prep-prev').addEventListener('click',async e=>{
   if(!S.d) return;
@@ -373,7 +424,7 @@ async function refresh(){
 }
 function showApp(){ $('v-login').hidden=true; $('v-app').hidden=false; $('who').hidden=false; }
 function logout(){ S.code=null; store.set('hr.code',null); store.set('hr.snap',null); $('v-app').hidden=true; $('who').hidden=true; $('v-login').hidden=false; prepLogin(); }
-$('btn-logout').addEventListener('click',()=>{ if(qGet().length&&!confirm('Des pointages attendent encore le réseau. Se déconnecter quand même ?')) return; qSet([]); logout(); });
+$('btn-logout').addEventListener('click',()=>{ if(qGet().length&&!confirm('Des changements attendent encore le réseau. Se déconnecter quand même ?')) return; qSet([]); logout(); });
 async function prepLogin(){
   try{ const e=await call('etat'); if(!e.codeDefini){ $('l-code-label').textContent='Choisissez votre code personnel'; $('l-hint').textContent='Premier lancement : ce code (4 caractères ou plus) protégera l’app.'; $('btn-login').textContent='Créer le code'; } }
   catch(e){}
@@ -391,7 +442,7 @@ S.code=store.get('hr.code');
 if(S.code){
   showApp();
   try{ const snap=JSON.parse(store.get('hr.snap')||'null'); if(snap){ S.d=snap; render(); } }catch(e){}
-  renderQueue(); renderClock(); refresh(); schedule(500);
+  render(); renderQueue(); renderClock(); refresh(); schedule(500);
 } else prepLogin();
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&S.code){ renderClock(); refresh(); schedule(0); } });
 })();
