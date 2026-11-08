@@ -218,7 +218,8 @@ function getData(code) {
   verifier_(code);
   const p = params_(), auj = aujourdhui_();
   const quarts = lirePointages_();
-  const debut = debutPaie_(auj, p.reference);
+  let debut = debutPaie_(auj, p.reference);
+  if (debut < p.reference) debut = p.reference;   // avant la première paie de l'app : afficher celle-ci
   const paie = paie_(debut, quarts, p);
   // Banque reportée : paie précédente enregistrée, sinon calcul à partir de la dernière connue
   let banque = banqueReportee_(debut);
