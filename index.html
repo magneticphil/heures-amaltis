@@ -32,7 +32,7 @@
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;-webkit-text-size-adjust:100%}
 [hidden]{display:none!important}
-.wrap{max-width:640px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:calc(12px + env(safe-area-inset-top,0px)) calc(48px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:16px}
+.wrap{max-width:640px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:calc(12px + env(safe-area-inset-top,0px)) calc(96px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:16px}
 h1,h2,h3{font-family:var(--f-display);font-weight:600;margin:0;letter-spacing:.01em}
 h1{font-size:1.6rem} h2{font-size:1.25rem} h3{font-size:1.05rem}
 .label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
@@ -88,6 +88,10 @@ input[type=date],input[type=time],input[type=password],input[type=text]{width:10
 .hist b{font-family:var(--f-display);font-size:1.15rem}
 details summary{cursor:pointer;font-weight:600;color:var(--accent)}
 details[open] summary{margin-bottom:12px}
+.fab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:15;border:0;border-radius:999px;padding:14px 20px;background:var(--accent);color:var(--accent-ink);font-family:var(--f-display);font-weight:700;font-size:1.1rem;letter-spacing:.02em;box-shadow:0 6px 18px rgba(0,0,0,.25);display:flex;align-items:center;gap:8px}
+.fab svg{width:20px;height:20px}
+.fab:disabled{opacity:.6}
+.toast{bottom:calc(84px + env(safe-area-inset-bottom,0px))!important}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:999px;font-weight:600;font-size:.92rem;z-index:20;max-width:calc(100% - 32px);text-align:center}
 @media (max-width:420px){.stats{grid-template-columns:1fr 1fr}.stats .stat:last-child{grid-column:1/-1}.row3{grid-template-columns:1fr 1fr}.row3 .field:first-child{grid-column:1/-1}}
 </style>
@@ -171,6 +175,10 @@ details[open] summary{margin-bottom:12px}
     </section>
   </div>
 </div>
+<button type="button" class="fab" id="btn-send" hidden aria-label="Préparer le courriel de la feuille de temps pour Marc">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
+  <span id="btn-send-label">Envoyer à Marc</span>
+</button>
 <div class="toast" id="toast" hidden></div>
 
 <script>
@@ -356,6 +364,9 @@ function render(){
   $('hist').innerHTML=(d.historique||[]).map(h=>'<li><span>'+fd(h.debut)+' au '+fd(h.fin)+'<br><span class="muted" style="font-size:.8rem">'+(h.brouillon||'')+'</span></span>'+
     '<span style="text-align:right">'+(h.fichier?'<a href="'+h.fichier+'" target="_blank" rel="noopener">Feuille</a> · ':'')+'banque <b>'+H(Number(String(h.nouvelleBanque).replace(',','.')))+' h</b></span></li>').join('')||'<li class="muted">Aucune paie pour le moment.</li>';
   if(!$('a-date').value) $('a-date').value=d.aujourdhui;
+  const deja=(d.historique||[]).find(h=>h.debut===p.debut);
+  if(!sending) $('btn-send-label').textContent=deja?'Renvoyer à Marc':'Envoyer à Marc';
+  $('btn-send').hidden=false;
   renderClock();
 }
 function apply(d){ S.d=d; try{ store.set('hr.snap',JSON.stringify(d)); }catch(e){} render(); }
@@ -406,6 +417,27 @@ $('btn-punch').addEventListener('click',()=>{
   toast((type==='entree'?'Entrée':'Sortie')+' à '+it.heure);
   enqueue(it);
 });
+/* ---------- Envoyer à Marc : feuille Excel + brouillon Gmail pour la paie en cours ---------- */
+let sending=false;
+$('btn-send').addEventListener('click',async()=>{
+  const v=view(); if(!v||sending) return;
+  if(qGet().length){ schedule(0); toast('Des changements partent encore : réessayez dans quelques secondes.'); return; }
+  const p=v.paie, deja=(v.historique||[]).some(h=>h.debut===p.debut);
+  const reste=v.aujourdhui<p.fin;
+  const msg=(deja?'Refaire':'Préparer')+' le courriel pour Marc, paie du '+fd(p.debut)+' au '+fd(p.fin)+' ?\n\n'+
+    'Total : '+H(p.total)+' h'+(p.feriees?' (dont '+H(p.feriees)+' h fériées)':'')+'\n'+
+    'Banque à reporter : '+(p.nouvelleBanque==null?'–':H(p.nouvelleBanque)+' h')+
+    (reste?'\n\nLes jours restants jusqu’au '+fd(p.fin)+' ne seront pas comptés.':'')+
+    (deja?'\n\nLa feuille sera remplacée ; supprimez l’ancien brouillon dans Gmail.':'')+
+    (v.ouvert?'\n\nAttention : un quart est encore en cours (sortie non pointée).':'');
+  if(!confirm(msg)) return;
+  sending=true; $('btn-send').disabled=true; $('btn-send-label').textContent='Préparation…';
+  try{
+    const d=await call('preparerPaie',S.code,p.debut); apply(d);
+    toast('Brouillon prêt dans Gmail : ouvrez-le et envoyez-le'+(d.prepare&&d.prepare.sortieManquante?' (sortie manquante !)':''));
+  }catch(err){ toast(err.message==='RESEAU'?'Pas de réseau : réessayez.':err.message); }
+  finally{ sending=false; $('btn-send').disabled=false; render(); }
+});
 $('btn-prep-prev').addEventListener('click',async e=>{
   if(!S.d) return;
   if(!confirm('Refaire la feuille de temps du '+fd(S.d.precedente.debut)+' au '+fd(S.d.precedente.fin)+' et préparer un nouveau brouillon pour Marc ?')) return;
@@ -423,7 +455,7 @@ async function refresh(){
   catch(e){ if(/Code invalide|Code non défini/.test(e.message)) logout(); else if(e.message==='RESEAU') banner('Pas de réseau : affichage des dernières données connues.'); else banner(e.message); }
 }
 function showApp(){ $('v-login').hidden=true; $('v-app').hidden=false; $('who').hidden=false; }
-function logout(){ S.code=null; store.set('hr.code',null); store.set('hr.snap',null); $('v-app').hidden=true; $('who').hidden=true; $('v-login').hidden=false; prepLogin(); }
+function logout(){ $('btn-send').hidden=true; S.code=null; store.set('hr.code',null); store.set('hr.snap',null); $('v-app').hidden=true; $('who').hidden=true; $('v-login').hidden=false; prepLogin(); }
 $('btn-logout').addEventListener('click',()=>{ if(qGet().length&&!confirm('Des changements attendent encore le réseau. Se déconnecter quand même ?')) return; qSet([]); logout(); });
 async function prepLogin(){
   try{ const e=await call('etat'); if(!e.codeDefini){ $('l-code-label').textContent='Choisissez votre code personnel'; $('l-hint').textContent='Premier lancement : ce code (4 caractères ou plus) protégera l’app.'; $('btn-login').textContent='Créer le code'; } }
