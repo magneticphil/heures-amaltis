@@ -8,7 +8,8 @@
  */
 
 const TZ = 'America/Toronto';
-const F_POINT = 'Pointages', F_PAIES = 'Paies', F_PARAM = 'Paramètres';
+const F_POINT = 'Pointages', F_PAIES = 'Paies', F_PARAM = 'Paramètres', F_CONGE = 'Congés';
+const H_CONGE = ['ID', 'Date', 'Heures', 'Requête', 'Modifié le'];
 const H_POINT = ['ID', 'Date', 'Entrée', 'Sortie', 'Requête', 'Modifié le'];
 const H_PAIES = ['Début', 'Fin', 'Banque reportée', 'Heures normales', 'Heures fériées', 'Total', 'Nouvelle banque', 'Fichier', 'Brouillon', 'Créé le'];
 const JOURS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
@@ -19,7 +20,7 @@ const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 // Seules ces fonctions sont joignables depuis l'écran.
 function fns_() {
-  return { etat, connexion, getData, pointer, ajouterQuart, modifierQuart, supprimerQuart, preparerPaie };
+  return { etat, connexion, getData, pointer, ajouterQuart, modifierQuart, supprimerQuart, definirConge, preparerPaie };
 }
 
 function doGet() {
@@ -181,6 +182,21 @@ function lirePointages_() {
   })).filter(q => q.id);
 }
 
+/** Congés pris dans la banque : une ligne par journée (heures payées à même la banque). */
+function feuilleConges_() {
+  const ss = ss_();
+  let sh = ss.getSheetByName(F_CONGE);
+  if (!sh) { sh = ss.insertSheet(F_CONGE); sh.appendRow(H_CONGE); sh.getRange('A:B').setNumberFormat('@'); sh.setFrozenRows(1); }
+  return sh;
+}
+function lireConges_() {
+  const sh = feuilleConges_(), n = sh.getLastRow() - 1;
+  if (n < 1) return [];
+  return sh.getRange(2, 1, n, 4).getDisplayValues().map((r, i) => ({
+    ligne: i + 2, id: r[0], date: r[1], heures: Number(String(r[2]).replace(',', '.')) || 0, req: r[3]
+  })).filter(c => c.id && c.heures > 0);
+}
+
 /** Minutes d'un quart (une sortie avant l'entrée = passage de minuit). */
 function minutes_(q) {
   if (!q.sortie) return 0;
@@ -190,7 +206,8 @@ function minutes_(q) {
 }
 const arrondi_ = min => Math.round(min / 15) * 15 / 60;   // au quart d'heure le plus proche
 
-function paie_(debut, quarts, p) {
+function paie_(debut, quarts, p, conges) {
+  conges = conges || [];
   const jours = [];
   for (let i = 0; i < 14; i++) {
     const date = addDays_(debut, i);
@@ -200,12 +217,16 @@ function paie_(debut, quarts, p) {
     jours.push({
       date, jour: JOURS[dow_(date)], ferie: fer, heuresFeriees: fer ? 8 : 0,
       quarts: qs.map(q => ({ id: q.id, entree: q.entree, sortie: q.sortie, minutes: minutes_(q) })),
-      minutes: min, heures: qs.length ? arrondi_(min) : null
+      minutes: min, heures: qs.length ? arrondi_(min) : null,
+      conge: conges.filter(c => c.date === date).reduce((s, c) => s + c.heures, 0) || 0
     });
   }
   const normales = jours.reduce((s, j) => s + (j.heures || 0), 0);
   const feriees = jours.reduce((s, j) => s + j.heuresFeriees, 0);
-  return { debut, fin: addDays_(debut, 13), jours, normales, feriees, total: normales + feriees, payees: p.payees };
+  const banque = jours.reduce((s, j) => s + j.conge, 0);
+  // travail = ce qui alimente la banque ; total = heures payées inscrites sur la feuille (avec les congés pris dans la banque)
+  return { debut, fin: addDays_(debut, 13), jours, normales, feriees, banque, travail: normales + feriees,
+    total: normales + feriees + banque, payees: p.payees };
 }
 
 function banqueReportee_(debut) {
@@ -217,23 +238,23 @@ function banqueReportee_(debut) {
 function getData(code) {
   verifier_(code);
   const p = params_(), auj = aujourdhui_();
-  const quarts = lirePointages_();
+  const quarts = lirePointages_(), conges = lireConges_();
   let debut = debutPaie_(auj, p.reference);
   if (debut < p.reference) debut = p.reference;   // avant la première paie de l'app : afficher celle-ci
-  const paie = paie_(debut, quarts, p);
+  const paie = paie_(debut, quarts, p, conges);
   // Banque reportée : paie précédente enregistrée, sinon calcul à partir de la dernière connue
   let banque = banqueReportee_(debut);
   if (banque === null) {
     const prec = debutPaie_(addDays_(debut, -1), p.reference), b0 = banqueReportee_(prec);
-    if (b0 !== null) { const pp = paie_(prec, quarts, p); banque = b0 + pp.total - p.payees; }
+    if (b0 !== null) { const pp = paie_(prec, quarts, p, conges); banque = b0 + pp.travail - p.payees; }
   }
   paie.banqueReportee = banque;
-  paie.nouvelleBanque = banque === null ? null : banque + paie.total - p.payees;
+  paie.nouvelleBanque = banque === null ? null : banque + paie.travail - p.payees;
   const ouvert = quarts.filter(q => !q.sortie).sort((a, b) => (a.date + a.entree < b.date + b.entree ? 1 : -1))[0] || null;
   const hist = ss_().getSheetByName(F_PAIES).getDataRange().getDisplayValues().slice(1).slice(-8).reverse()
     .map(r => ({ debut: r[0], fin: r[1], banqueReportee: r[2], total: r[5], nouvelleBanque: r[6], fichier: r[7], brouillon: r[8] }));
   // Paie précédente (pour corriger des oublis avant l'envoi) : jours seulement
-  const precedente = paie_(addDays_(debut, -14), quarts, p);
+  const precedente = paie_(addDays_(debut, -14), quarts, p, conges);
   return {
     aujourdhui: auj, maintenant: Utilities.formatDate(new Date(), TZ, 'HH:mm'),
     paie, precedente: { debut: precedente.debut, fin: precedente.fin, jours: precedente.jours, total: precedente.total },
@@ -299,6 +320,22 @@ function modifierQuart(code, id, date, entree, sortie) {
   });
 }
 
+/** Fixe les heures de congé prises dans la banque pour une journée (0 = retirer). */
+function definirConge(code, date, heures, req) {
+  verifier_(code);
+  s2utc_(date);
+  heures = Math.round(Number(heures) * 4) / 4;
+  if (!(heures >= 0 && heures <= 24)) throw new Error('Heures de congé invalides');
+  return avecVerrou_(() => {
+    const sh = feuilleConges_();
+    const lignes = lireConges_().filter(c => c.date === date).map(c => c.ligne).sort((a, b) => b - a);
+    lignes.forEach(l => sh.deleteRow(l));
+    if (heures > 0) sh.appendRow([Utilities.getUuid().slice(0, 8), date, heures, req || '', new Date().toISOString()]);
+    SpreadsheetApp.flush();
+    return getData(code);
+  });
+}
+
 function supprimerQuart(code, id) {
   verifier_(code);
   return avecVerrou_(() => {
@@ -336,11 +373,11 @@ function preparer_(debut, refaire) {
   if (debut < p.reference) throw new Error('Cette paie a été faite à la main avant l’app : elle ne peut pas être refaite ici.');
   if (!p.modele) throw new Error('Modèle Excel non configuré (Paramètres)');
   const quarts = lirePointages_();
-  const paie = paie_(debut, quarts, p);
+  const paie = paie_(debut, quarts, p, lireConges_());
   const banque = banqueReportee_(debut);
   if (banque === null) throw new Error('Banque reportée introuvable : la paie précédente n’est pas enregistrée.');
   paie.banqueReportee = banque;
-  paie.nouvelleBanque = banque + paie.total - p.payees;
+  paie.nouvelleBanque = banque + paie.travail - p.payees;
   const ouverts = quarts.filter(q => !q.sortie && q.date >= debut && q.date <= paie.fin);
 
   const nom = 'feuille_de_temps_' + debut + '_au_' + paie.fin + '.xlsx';
@@ -357,6 +394,7 @@ function preparer_(debut, refaire) {
     'Voici ma feuille de temps pour la période du ' + periode + '.', '',
     'Heures travaillées : ' + fmt(paie.normales) + ' h',
     paie.feriees ? 'Heures fériées : ' + fmt(paie.feriees) + ' h' : null,
+    paie.banque ? 'Heures prises dans la banque : ' + fmt(paie.banque) + ' h' : null,
     'Total : ' + fmt(paie.total) + ' h (' + fmt(p.payees) + ' h payées)',
     'Banque d’heures : ' + fmt(banque) + ' h reportées, ' + fmt(paie.nouvelleBanque) + ' h à reporter', '',
     'Merci,', p.nom
@@ -376,7 +414,7 @@ function preparer_(debut, refaire) {
 /** Essai depuis l'éditeur : fabrique la feuille de la paie en cours dans Drive (fichier TEST_), sans brouillon. */
 function testerModele() {
   const p = params_(), debut = debutPaie_(aujourdhui_(), p.reference);
-  const paie = paie_(debut, lirePointages_(), p);
+  const paie = paie_(debut, lirePointages_(), p, lireConges_());
   paie.banqueReportee = banqueReportee_(debut) || 0;
   const nom = 'TEST_feuille_de_temps_' + debut + '.xlsx';
   const f = DriveApp.getFolderById(p.dossier).createFile(remplirModele_(DriveApp.getFileById(p.modele).getBlob(), paie, nom));
@@ -425,10 +463,12 @@ function remplirFeuilleXml(xml, paie) {
     set('B' + r, j.jour); set('C' + r, s0 + k);
     set('D' + r, j.heures === null ? null : j.heures);
     set('E' + r, j.heuresFeriees ? 8 : null);
-    set('H' + r, (j.heures || 0) + j.heuresFeriees);
+    set('F' + r, j.conge ? j.conge : null);
+    set('H' + r, (j.heures || 0) + j.heuresFeriees + (j.conge || 0));
   });
-  set('D22', paie.normales); set('E22', paie.feriees); set('F22', 0); set('G22', 0); set('H22', paie.total);
-  set('I22', paie.total ? paie.banqueReportee + paie.total - paie.payees : null);
+  set('D22', paie.normales); set('E22', paie.feriees); set('F22', paie.banque || 0); set('G22', 0); set('H22', paie.total);
+  // même formule que la feuille : banque reportée + travaillées + fériées − payées (vide si rien n'est inscrit)
+  set('I22', paie.total ? paie.banqueReportee + paie.travail - paie.payees : null);
   set('E23', paie.payees); set('G23', paie.banqueReportee);
   return xml;
 }

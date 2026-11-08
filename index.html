@@ -78,6 +78,12 @@ input[type=date],input[type=time],input[type=password],input[type=text]{width:10
 .tag{display:inline-block;font-size:.72rem;font-weight:600;border-radius:999px;padding:1px 8px;background:var(--warn-soft);color:var(--warn);margin-left:6px;vertical-align:1px}
 .tag.open{background:var(--out-soft);color:var(--out)}
 .tag.q{background:var(--sunk);color:var(--muted)}
+.tag.cg{background:var(--accent-soft);color:var(--accent)}
+.tag.late{background:var(--out);color:#fff}
+.clock .state.late{color:var(--out);font-weight:600}
+.weeksep b{float:right;color:var(--ink);font-family:var(--f-display);font-size:.95rem;letter-spacing:0;text-transform:none}
+.edit .conge{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;border-top:1px dashed var(--line);padding-top:10px}
+.edit .conge input{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);min-height:42px;font-size:16px}
 .edit{padding:4px 8px 12px;display:flex;flex-direction:column;gap:10px}
 .edit .shift{display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:center}
 .weeksep{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;padding:12px 8px 4px}
@@ -100,7 +106,7 @@ details[open] summary{margin-bottom:12px}
 <div class="wrap">
   <header class="top">
     <div>
-      <div class="label">Amaltis · Feuille de temps <span style="opacity:.6">· v8</span></div>
+      <div class="label">Amaltis · Feuille de temps <span style="opacity:.6">· v9</span></div>
       <h1>Heures</h1>
     </div>
     <div class="who" id="who" hidden>Philippe Brunelle<br><button type="button" class="link" id="btn-logout" style="font-size:.8rem;font-weight:500">Se déconnecter</button></div>
@@ -137,6 +143,7 @@ details[open] summary{margin-bottom:12px}
         <div class="stat"><span class="label">Fériées</span><b id="s-fer">–</b></div>
         <div class="stat"><span class="label">Total</span><b id="s-tot">–</b></div>
       </div>
+      <div class="muted" id="s-cg" style="font-size:.85rem;margin-top:-6px" hidden></div>
       <div class="bank">
         <span><span class="label">Banque reportée</span> <b id="b-old">–</b></span>
         <span id="b-detail" class="muted" style="text-align:right"></span>
@@ -231,6 +238,7 @@ function send(it){
     case 'ajouter':   return call('ajouterQuart',S.code,it.date,it.entree,it.sortie||'',it.id);
     case 'modifier':  return call('modifierQuart',S.code,it.qid,it.date,it.entree,it.sortie||'');
     case 'supprimer': return call('supprimerQuart',S.code,it.qid);
+    case 'conge':     return call('definirConge',S.code,it.date,it.heures,it.id);
   }
   return Promise.reject(new Error('demande invalide'));
 }
@@ -239,6 +247,7 @@ function libelle(it){
   if(op==='pointer') return 'Pointage '+(it.type==='entree'?'d’entrée':'de sortie')+' de '+it.heure;
   if(op==='ajouter') return 'Ajout du quart du '+fd(it.date);
   if(op==='modifier') return 'Correction du quart du '+fd(it.date);
+  if(op==='conge') return 'Congé du '+fd(it.date);
   return 'Suppression d’un quart';
 }
 async function flush(){
@@ -281,7 +290,9 @@ function recalc(per){
   });
   per.normales=per.jours.reduce((s,j)=>s+(j.heures||0),0);
   per.feriees=per.jours.reduce((s,j)=>s+(j.heuresFeriees||0),0);
-  per.total=per.normales+per.feriees;
+  per.banque=per.jours.reduce((s,j)=>s+(j.conge||0),0);
+  per.travail=per.normales+per.feriees;
+  per.total=per.travail+per.banque;
 }
 function view(){
   if(!S.d) return null;
@@ -299,44 +310,58 @@ function view(){
     } else if(op==='ajouter'){ const j=day(it.date); if(j) j.quarts.push({id:'tmp-'+it.id,entree:it.entree,sortie:it.sortie||''}); }
     else if(op==='modifier'){ const f=find(it.qid); if(f){ f.j.quarts.splice(f.i,1); const j=day(it.date); if(j) j.quarts.push({id:it.qid,entree:it.entree,sortie:it.sortie||''}); } }
     else if(op==='supprimer'){ const f=find(it.qid); if(f) f.j.quarts.splice(f.i,1); }
+    else if(op==='conge'){ const j=day(it.date); if(j) j.conge=Number(it.heures)||0; }
   });
   recalc(v.paie); recalc(v.precedente);
-  const p=v.paie; p.nouvelleBanque=p.banqueReportee==null?null:p.banqueReportee+p.total-p.payees;
+  const p=v.paie; p.nouvelleBanque=p.banqueReportee==null?null:p.banqueReportee+p.travail-p.payees;
   const o=ouverts()[0]; v.ouvert=o?{id:o.q.id,date:o.j.date,entree:o.q.entree}:null;
   return v;
 }
 function openState(){ const v=view(); return v&&v.ouvert ? {date:v.ouvert.date, entree:v.ouvert.entree} : null; }
+// Journée pas fermée : quart encore ouvert d'un jour précédent, ou du jour même à partir de 20 h
+const HEURE_ALERTE=20;
+function enRetard(date, now){ now=now||new Date(); return date<localDate(now) || (date===localDate(now) && now.getHours()>=HEURE_ALERTE); }
 
 /* ---------- affichage ---------- */
 function renderClock(){
   const now=new Date();
   $('c-now').textContent=localTime(now);
   $('c-date').textContent=fdl(localDate(now));
-  const open=openState(), b=$('btn-punch');
+  const open=openState(), b=$('btn-punch'), st=$('c-state');
+  const late=!!(open&&enRetard(open.date,now));
   if(open){
     let min=Math.round((now-dObj(open.date))/60000)-toMin(open.entree); if(min<0) min=0;
-    $('c-state').innerHTML='Entré à <b>'+open.entree+'</b>'+(open.date!==localDate(now)?' ('+fd(open.date)+')':'')+' · '+dur(min);
+    st.innerHTML=(late?'⚠ Sortie non pointée — entré à <b>':'Entré à <b>')+open.entree+'</b>'+(open.date!==localDate(now)?' ('+fd(open.date)+')':'')+(late?'':' · '+dur(min));
     b.textContent='Sortie'; b.className='punch out';
   } else {
-    $('c-state').textContent='Pas entré pour le moment';
+    st.textContent='Pas entré pour le moment';
     b.textContent='Entrée'; b.className='punch';
   }
+  st.classList.toggle('late',late);
+  // pastille sur l'icône de l'app, si l'appareil le permet
+  try{ if(late&&navigator.setAppBadge) navigator.setAppBadge(1).catch(()=>{}); else if(navigator.clearAppBadge) navigator.clearAppBadge().catch(()=>{}); }catch(e){}
+  if(late!==S.late){ S.late=late; render(); }
   b.disabled=!S.d;
 }
 setInterval(renderClock,15000);
 
 function dayItems(jours, today, editable){
   let html='';
+  const totJ=j=>(j.heures||0)+(j.heuresFeriees||0)+(j.conge||0);
+  const sem=k=>jours.slice(k*7,k*7+7).reduce((s,j)=>s+totJ(j),0);
   jours.forEach((j,i)=>{
-    if(i===7) html+='<li class="weeksep">Deuxième semaine</li>';
-    if(i===0) html+='<li class="weeksep">Première semaine</li>';
+    if(i===7) html+='<li class="weeksep">Deuxième semaine <b>'+H(sem(1))+' h</b></li>';
+    if(i===0) html+='<li class="weeksep">Première semaine <b>'+H(sem(0))+' h</b></li>';
     const wd=dObj(j.date).getDay(), wk=wd===0||wd===6;
     const qs=j.quarts.map(q=>q.entree+' – '+(q.sortie||'…')).join(' · ');
-    const tags=(j.ferie?'<span class="tag" title="8 h fériées">'+j.ferie+' +8 h</span>':'')+(j.quarts.some(q=>!q.sortie)?'<span class="tag open">en cours</span>':'');
-    const tot=(j.heures||0)+(j.heuresFeriees||0);
+    const ouvert=j.quarts.some(q=>!q.sortie);
+    const tags=(j.ferie?'<span class="tag" title="8 h fériées">'+j.ferie+' +8 h</span>':'')+
+      (j.conge?'<span class="tag cg">Congé banque '+H(j.conge)+' h</span>':'')+
+      (ouvert?(enRetard(j.date)?'<span class="tag late">⚠ sortie non pointée</span>':'<span class="tag open">en cours</span>'):'');
+    const tot=totJ(j);
     html+='<li class="'+(wk?'wkend ':'')+(j.date===today?'today':'')+'" data-date="'+j.date+'">'+
       '<button type="button" class="dayrow"'+(editable?'':' disabled')+'><span class="dn">'+JOURS[wd]+'<small>'+fd(j.date)+'</small>'+tags+'</span>'+
-      '<span class="h">'+(j.quarts.length||j.heuresFeriees?H(tot):'')+'</span>'+
+      '<span class="h">'+(j.quarts.length||j.heuresFeriees||j.conge?H(tot):'')+'</span>'+
       (qs?'<span class="q">'+qs+(j.quarts.length&&j.heures!==j.minutes/60?' · '+dur(j.minutes)+' → arrondi '+H(j.heures)+' h':'')+'</span>':'')+
       '</button></li>';
   });
@@ -349,11 +374,14 @@ function render(){
   $('s-norm').innerHTML=H(p.normales)+' <small>h</small>';
   $('s-fer').innerHTML=H(p.feriees)+' <small>h</small>';
   $('s-tot').innerHTML=H(p.total)+' <small>/ '+H(p.payees)+'</small>';
-  // Règle de la paie : nouvelle banque = banque reportée + (total − 80 h). Rien n'est retiré en cours de route.
+  $('s-cg').hidden=!p.banque; $('s-cg').textContent='dont '+H(p.banque)+' h de congé pris dans la banque';
+  // Règle de la paie : nouvelle banque = banque reportée + (travaillées + fériées − 80 h).
+  // Les congés pris dans la banque comptent dans le total payé, pas dans ce calcul.
   $('b-old').textContent=p.banqueReportee==null?'–':H(p.banqueReportee)+' h';
-  const diff=p.total-p.payees;
-  if(diff<0) $('b-detail').innerHTML='Encore <b>'+H(-diff)+' h</b> pour atteindre '+H(p.payees)+' h';
-  else $('b-detail').innerHTML='<b>+'+H(diff)+' h</b> à mettre en banque'+(p.banqueReportee==null?'':' → <b>'+H(p.nouvelleBanque)+' h</b>');
+  const reste=p.payees-p.total, diff=p.travail-p.payees, fin=p.banqueReportee==null?'':' → <b>'+H(p.nouvelleBanque)+' h</b>';
+  if(reste>0) $('b-detail').innerHTML='Encore <b>'+H(reste)+' h</b> pour atteindre '+H(p.payees)+' h';
+  else if(diff>=0) $('b-detail').innerHTML='<b>+'+H(diff)+' h</b> à mettre en banque'+fin;
+  else $('b-detail').innerHTML='<b>−'+H(-diff)+' h</b> prises dans la banque'+fin;
   $('days').innerHTML=dayItems(p.jours,d.aujourdhui,true);
   $('prev-dates').textContent='Du '+fd(d.precedente.debut)+' au '+fd(d.precedente.fin)+' · total '+H(d.precedente.total)+' h';
   const avantApp=d.reference&&d.precedente.debut<d.reference;
@@ -379,11 +407,19 @@ document.addEventListener('click',e=>{
   box.innerHTML=j.quarts.map(q=>'<div class="shift" data-id="'+q.id+'"><input type="time" value="'+q.entree+'" aria-label="Entrée"><input type="time" value="'+(q.sortie||'')+'" aria-label="Sortie">'+
       '<button class="btn small" data-act="save">OK</button><button class="btn small danger" data-act="del">Suppr.</button></div>').join('')+
     '<div class="shift" data-new="1"><input type="time" aria-label="Entrée"><input type="time" aria-label="Sortie"><button class="btn small" data-act="add" style="grid-column:span 2">Ajouter un quart</button></div>'+
-    '<div class="muted" style="font-size:.8rem">Heures arrondies au quart d’heure le plus proche, par journée.</div>';
+    '<div class="conge"><span class="label" style="margin:0">Congé (banque)</span><input type="number" inputmode="decimal" min="0" max="24" step="0.25" value="'+(j.conge||8)+'" aria-label="Heures de congé prises dans la banque">'+
+      '<button class="btn small" data-act="conge">'+(j.conge?'OK':'Ajouter')+'</button>'+(j.conge?'<button class="btn small danger" data-act="conge-del">Retirer</button>':'<span></span>')+'</div>'+
+    '<div class="muted" style="font-size:.8rem">Heures arrondies au quart d’heure le plus proche, par journée. Un congé pris dans la banque compte dans le total payé et réduit la banque d’autant.</div>';
   li.appendChild(box);
 });
 document.addEventListener('click',e=>{
   const b=e.target.closest('.edit button'); if(!b) return;
+  if(b.dataset.act==='conge'||b.dataset.act==='conge-del'){
+    const li=b.closest('li'), date=li.dataset.date;
+    const h=b.dataset.act==='conge-del'?0:Math.round(Number(String(li.querySelector('.conge input').value).replace(',','.'))*4)/4;
+    if(!(h>=0&&h<=24)){ toast('Heures de congé invalides'); return; }
+    enqueue({op:'conge',id:newId('cg'),date,heures:h}); toast(h?'Congé de '+H(h)+' h inscrit':'Congé retiré'); return;
+  }
   const sh=b.closest('.shift'), li=b.closest('li'), date=li.dataset.date;
   const [i1,i2]=sh.querySelectorAll('input'), act=b.dataset.act, qid=sh.dataset.id;
   if((act==='save'||act==='add')&&!i1.value){ toast('Indiquez l’heure d’entrée'); return; }
