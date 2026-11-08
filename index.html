@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="fr-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#143c35">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Heures Amaltis</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#143c35;background:#edf3ef;color-scheme:light}
+*{box-sizing:border-box} body{margin:0} main{max-width:38rem;margin:auto;padding:2rem 1rem}
+header{margin-bottom:1.4rem} header p{margin:0;text-transform:uppercase;letter-spacing:.16em;font-size:.75rem;font-weight:700}
+h1{font-size:clamp(2rem,8vw,3rem);margin:.25rem 0} h2{margin:0 0 .75rem;font-size:1.2rem}
+section{background:white;border:1px solid #d7e4dc;border-radius:1rem;padding:1.2rem;margin-bottom:1rem}
+label{display:block;font-weight:600;margin:.75rem 0 .25rem} input,button{font:inherit;min-height:2.8rem;border-radius:.6rem}
+input{width:100%;border:1px solid #80998d;padding:.55rem .65rem}
+button{border:0;background:#143c35;color:white;padding:.65rem .95rem;font-weight:700;cursor:pointer}
+button:disabled{opacity:.55;cursor:default} button.secondary{background:#e0eee6;color:#143c35}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #528961;outline-offset:2px}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem}.actions button{flex:1}
+#status{min-height:1.5rem;overflow-wrap:anywhere} #status[data-error=true]{color:#a1252c}
+ul{padding-left:1.2rem} li{margin:.4rem 0} details{margin-top:1rem} summary{cursor:pointer;font-weight:650}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<header><p>Pointage</p><h1>Heures Amaltis</h1></header>
+<p id="status" role="status" aria-live="polite">Connexion au service…</p>
+<section id="access">
+  <h2>Accès personnel</h2>
+  <p id="access-help">Le code donne accès à tes pointages.</p>
+  <form id="login">
+    <label for="code">Code personnel</label>
+    <input id="code" type="password" required maxlength="40" autocomplete="current-password" autocapitalize="none" spellcheck="false" aria-describedby="access-help">
+    <div class="actions"><button id="sign-in">Se connecter</button></div>
+  </form>
+</section>
+<div id="dashboard" hidden>
+  <section>
+    <h2>Mon quart</h2>
+    <p id="shift"></p>
+    <div class="actions">
+      <button id="start" type="button">Pointer l’entrée</button>
+      <button id="end" type="button">Pointer la sortie</button>
+    </div>
+    <div class="actions">
+      <button id="refresh" class="secondary" type="button">Actualiser</button>
+      <button id="logout" class="secondary" type="button">Se déconnecter</button>
+    </div>
+  </section>
+  <section>
+    <h2>Période de paie</h2>
+    <p id="period"></p>
+    <p id="total"></p>
+    <details><summary>Voir les quarts</summary><ul id="shifts"></ul></details>
+  </section>
+</div>
+</main>
+<script>
+'use strict';
+const endpoint = 'https://script.google.com/macros/s/AKfycby_5sAQLLS0ZqpoAoLi3XOjWV6uGGpTP-eC0xnqjqh34K8kdIKeRaOtlSqOULNGCbFC/exec';
+const $ = id => document.getElementById(id);
+const hours = new Intl.NumberFormat('fr-CA', { maximumFractionDigits: 2 });
+let code = '';
+let data;
+let busy = false;
+let pending;
+
+async function request(fn, ...args) {
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: JSON.stringify({ fn, args }),
+      signal: AbortSignal.timeout(30000)
+    });
+  } catch {
+    throw new Error('Le service ne répond pas. Réessaie dans un instant.');
+  }
+  if (!response.ok) throw new Error('Le service est temporairement indisponible.');
+  const result = await response.json().catch(() => null);
+  if (!result || typeof result.ok !== 'boolean') throw new Error('Réponse inattendue du service.');
+  if (!result.ok) {
+    const error = new Error(result.error || 'La demande a échoué.');
+    error.rejected = true;
+    throw error;
+  }
+  return result.data;
+}
+
+function status(message, error = false) {
+  $('status').textContent = message;
+  $('status').dataset.error = error;
+}
+
+function controls() {
+  $('sign-in').disabled = busy;
+  $('refresh').disabled = busy;
+  $('logout').disabled = busy;
+  $('start').disabled = busy || (pending ? pending.type !== 'entree' : Boolean(data?.ouvert));
+  $('end').disabled = busy || (pending ? pending.type !== 'sortie' : !data?.ouvert);
+  $('start').textContent = pending?.type === 'entree' ? 'Réessayer l’entrée' : 'Pointer l’entrée';
+  $('end').textContent = pending?.type === 'sortie' ? 'Réessayer la sortie' : 'Pointer la sortie';
+}
+
+async function run(action) {
+  if (busy) return;
+  busy = true;
+  controls();
+  try {
+    await action();
+  } catch (error) {
+    status(error.message, true);
+  } finally {
+    busy = false;
+    controls();
+  }
+}
+
+function dateLabel(value) {
+  return new Intl.DateTimeFormat('fr-CA', { dateStyle: 'medium', timeZone: 'UTC' })
+    .format(new Date(value + 'T12:00:00Z'));
+}
+
+function render(next) {
+  data = next;
+  $('access').hidden = true;
+  $('dashboard').hidden = false;
+  $('shift').textContent = data.ouvert
+    ? 'En cours depuis ' + data.ouvert.entree + ' le ' + dateLabel(data.ouvert.date) + '.'
+    : 'Aucun quart en cours.';
+  $('period').textContent = 'Du ' + dateLabel(data.paie.debut) + ' au ' + dateLabel(data.paie.fin);
+  $('total').textContent = hours.format(data.paie.total) + ' h au total';
+  const rows = data.paie.jours.flatMap(day => day.quarts.map(shift => {
+    const row = document.createElement('li');
+    row.textContent = dateLabel(day.date) + ' · ' + shift.entree + ' – ' + (shift.sortie || 'en cours');
+    return row;
+  }));
+  if (!rows.length) {
+    const row = document.createElement('li');
+    row.textContent = 'Aucun quart dans cette période.';
+    rows.push(row);
+  }
+  $('shifts').replaceChildren(...rows);
+  controls();
+}
+
+function clock() {
+  const parts = new Intl.DateTimeFormat('fr-CA', {
+    timeZone: 'America/Toronto', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return { date: values.year + '-' + values.month + '-' + values.day, time: values.hour + ':' + values.minute };
+}
+
+function punch(type) {
+  run(async () => {
+    pending ||= { type, ...clock(), id: crypto.randomUUID() };
+    status('Enregistrement du pointage…');
+    let next;
+    try {
+      next = await request('pointer', code, pending.type, pending.date, pending.time, pending.id);
+    } catch (error) {
+      if (error.rejected) pending = undefined;
+      throw error;
+    }
+    pending = undefined;
+    render(next);
+    status(type === 'entree' ? 'Entrée enregistrée.' : 'Sortie enregistrée.');
+  });
+}
+
+$('login').addEventListener('submit', event => {
+  event.preventDefault();
+  run(async () => {
+    const candidate = $('code').value.trim();
+    if (!candidate) throw new Error('Entre ton code personnel.');
+    status('Vérification du code…');
+    const state = await request('etat');
+    if (!state.codeDefini) {
+      throw new Error('Le code personnel doit être configuré par le propriétaire avant la première connexion.');
+    }
+    const next = await request('getData', candidate);
+    code = candidate;
+    $('login').reset();
+    render(next);
+    status('Connecté.');
+  });
+});
+$('start').addEventListener('click', () => punch('entree'));
+$('end').addEventListener('click', () => punch('sortie'));
+$('refresh').addEventListener('click', () => run(async () => {
+  render(await request('getData', code));
+  status(pending ? 'Pointage à confirmer. Utilise le bouton Réessayer.' : 'Pointages actualisés.');
+}));
+$('logout').addEventListener('click', () => {
+  code = '';
+  data = undefined;
+  pending = undefined;
+  $('shift').textContent = '';
+  $('period').textContent = '';
+  $('total').textContent = '';
+  $('shifts').replaceChildren();
+  $('dashboard').hidden = true;
+  $('access').hidden = false;
+  status('Déconnecté.');
+  $('code').focus();
+});
+run(async () => {
+  const state = await request('etat');
+  status(state.codeDefini
+    ? 'Entre ton code personnel.'
+    : 'Le code personnel doit être configuré par le propriétaire.');
+});
+</script>
+</body>
+</html>
